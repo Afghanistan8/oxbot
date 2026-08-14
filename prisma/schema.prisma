@@ -1,0 +1,450 @@
+// oxbot — Prisma schema
+// PostgreSQL + native enums. Data model for a Web3 giveaway / raffle platform.
+//
+// Design notes:
+//  - Auth models (User/Account/Session/VerificationToken) follow the Auth.js
+//    (NextAuth v5) Prisma adapter contract.
+//  - Entries are private: authorization is enforced in the app layer, but the
+//    schema keeps entrant data cleanly separated from public giveaway fields.
+//  - FCFS uses a monotonic `seq` per giveaway, assigned atomically at entry time.
+//  - Random draws store a `drawSeed` so the selection is reproducible/auditable.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  EDITOR
+}
+
+enum GiveawayType {
+  RANDOM // classic random raffle
+  FCFS // first-come-first-served
+  CODE // code-gated entry
+}
+
+enum GiveawayStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  ENDED // past end time, winners not yet finalized
+  FINALIZED // winners drawn/confirmed
+  CANCELLED
+}
+
+enum GiveawayVisibility {
+  PUBLIC
+  COMMUNITY // gated to a linked Discord/Telegram community
+  PRIVATE // primarily via generated codes; hidden from public listings
+}
+
+enum Blockchain {
+  ETHEREUM
+  SOLANA
+  ROBINHOOD
+  ARBITRUM
+  BASE
+  BITCOIN
+  SUI
+  POLYGON
+  OTHER
+}
+
+enum RequirementType {
+  CAPTCHA
+  EMAIL
+  CODE
+  TWITTER_FOLLOW
+  TWITTER_LIKE
+  TWITTER_RETWEET
+  DISCORD_MEMBER
+  DISCORD_ROLE
+  WALLET // future-ready; optional in Phase 1
+}
+
+enum EntryStatus {
+  PENDING // started but not all requirements complete
+  COMPLETED // all requirements satisfied; eligible
+  DISQUALIFIED // failed a re-check or manually removed
+}
+
+enum RequirementStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum WinnerMethod {
+  RANDOM
+  FCFS
+  MANUAL
+}
+
+// ---------------------------------------------------------------------------
+// Auth (Auth.js / NextAuth v5 adapter contract)
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts     Account[]
+  sessions     Session[]
+  memberships  TeamMember[]
+  entries      Entry[]
+  wins         Winner[]
+  auditLogs    AuditLog[]
+  connections  SocialConnection[]
+  wallets      Wallet[]
+}
+
+model Account {
+  id                       String  @id @default(cuid())
+  userId                   String
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String? @db.Text
+  access_token             String? @db.Text
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String? @db.Text
+  session_state            String?
+  refresh_token_expires_in Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ---------------------------------------------------------------------------
+// Social connections (X / Discord) — used for requirement verification
+// ---------------------------------------------------------------------------
+
+model SocialConnection {
+  id             String   @id @default(cuid())
+  userId         String
+  provider       String // "twitter" | "discord"
+  providerUserId String
+  username       String?
+  displayName    String?
+  avatarUrl      String?
+  accessToken    String?  @db.Text
+  refreshToken   String?  @db.Text
+  expiresAt      DateTime?
+  scope          String?
+  raw            Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@index([provider, providerUserId])
+}
+
+model Wallet {
+  id        String     @id @default(cuid())
+  userId    String
+  chain     Blockchain
+  address   String
+  verified  Boolean    @default(false)
+  // The account's single main wallet, shown on the profile. App-layer enforces
+  // at most one per user (see setPrimaryWalletAction) — changing it once set
+  // requires a CAPTCHA pass.
+  isPrimary Boolean    @default(false)
+  createdAt DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, chain, address])
+  @@index([address])
+}
+
+// ---------------------------------------------------------------------------
+// Team / Project (founder side)
+// ---------------------------------------------------------------------------
+
+model Team {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  name         String
+  description  String?  @db.Text
+  logoUrl      String?
+  bannerUrl    String?
+  website      String?
+  xHandle      String? // official X (Twitter) handle, without @
+  discordInvite String?
+  discordGuildId String? // guild id once the oxbot Discord bot has been invited
+  telegram     String?
+  chains       Blockchain[]
+
+  // Primary blockchain + mint/launch details, shown on the project profile.
+  primaryChain Blockchain?
+  totalSupply  String? // free text: a number, or "TBD"
+  mintPrice    String? // free text: e.g. "0.08 ETH", or "Free"
+  mintAt       DateTime?
+  mintTba      Boolean  @default(false) // true = mint date "to be announced"
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  members   TeamMember[]
+  giveaways Giveaway[]
+  invites   TeamInvite[]
+  auditLogs AuditLog[]
+}
+
+model TeamMember {
+  id       String   @id @default(cuid())
+  teamId   String
+  userId   String
+  role     TeamRole @default(EDITOR)
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+model TeamInvite {
+  id        String   @id @default(cuid())
+  teamId    String
+  email     String
+  role      TeamRole @default(EDITOR)
+  token     String   @unique @default(cuid())
+  expiresAt DateTime
+  acceptedAt DateTime?
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, email])
+  @@index([email])
+}
+
+// ---------------------------------------------------------------------------
+// Giveaway
+// ---------------------------------------------------------------------------
+
+model Giveaway {
+  id            String             @id @default(cuid())
+  teamId        String
+  slug          String             @unique
+  title         String
+  description   String?            @db.Text
+  bannerUrl     String?
+  prize         String             @db.Text
+  type          GiveawayType
+  status        GiveawayStatus     @default(DRAFT)
+  visibility    GiveawayVisibility @default(PUBLIC)
+  chain         Blockchain         @default(ETHEREUM)
+  winnersCount  Int                @default(1)
+
+  startAt       DateTime // stored in UTC
+  endAt         DateTime // stored in UTC
+
+  // Public display options
+  hideEntryCount Boolean @default(false)
+
+  // Project / social context shown to participants
+  xAccount        String? // e.g. "ProjectX" (follow target)
+  discordServerId String? // guild id for membership/role gating
+  telegram        String?
+
+  // Random draw auditability
+  drawSeed  String?
+  drawnAt   DateTime?
+
+  // FCFS monotonic counter (next seq to assign). Kept on the row for atomic bump.
+  fcfsCursor Int @default(0)
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  team         Team                  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  requirements GiveawayRequirement[]
+  entries      Entry[]
+  codes        EntryCode[]
+  winners      Winner[]
+
+  @@index([teamId])
+  @@index([status])
+  @@index([visibility, status])
+}
+
+model GiveawayRequirement {
+  id         String          @id @default(cuid())
+  giveawayId String
+  type       RequirementType
+  // Flexible per-type config, e.g.:
+  //  TWITTER_FOLLOW: { "handle": "ProjectX" }
+  //  TWITTER_LIKE:   { "tweetId": "123" }
+  //  DISCORD_ROLE:   { "guildId": "...", "roleIds": ["...","..."] }
+  //  CODE:           { "caseSensitive": false }
+  config     Json            @default("{}")
+  required   Boolean         @default(true)
+  order      Int             @default(0)
+
+  giveaway  Giveaway                 @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
+  statuses  EntryRequirementStatus[]
+
+  @@index([giveawayId])
+}
+
+// ---------------------------------------------------------------------------
+// Entries (PRIVATE — only visible to the owning team)
+// ---------------------------------------------------------------------------
+
+model Entry {
+  id          String      @id @default(cuid())
+  giveawayId  String
+  userId      String
+  status      EntryStatus @default(PENDING)
+  // FCFS ordering: null until the entry is completed and assigned a slot.
+  seq         Int?
+  // Arbitrary capture (wallet used, code redeemed, ip hash, etc.)
+  metadata    Json        @default("{}")
+  submittedAt DateTime?   // set when status flips to COMPLETED
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  giveaway   Giveaway                 @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
+  user       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  statuses   EntryRequirementStatus[]
+  winner     Winner?
+  codeUse    EntryCodeRedemption?
+
+  @@unique([giveawayId, userId]) // one entry per user per giveaway
+  @@unique([giveawayId, seq]) // FCFS slot uniqueness
+  @@index([giveawayId, status])
+}
+
+model EntryRequirementStatus {
+  id            String            @id @default(cuid())
+  entryId       String
+  requirementId String
+  status        RequirementStatus @default(PENDING)
+  detail        Json?             // provider response snapshot for auditing
+  checkedAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  entry       Entry               @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  requirement GiveawayRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, requirementId])
+  @@index([requirementId])
+}
+
+// ---------------------------------------------------------------------------
+// Entry codes (giveaway type CODE, and the CODE requirement)
+// ---------------------------------------------------------------------------
+
+model EntryCode {
+  id         String   @id @default(cuid())
+  giveawayId String
+  code       String
+  maxUses    Int      @default(1) // 1 = single-use
+  uses       Int      @default(0)
+  revoked    Boolean  @default(false)
+  note       String?
+  createdAt  DateTime @default(now())
+
+  giveaway    Giveaway              @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
+  redemptions EntryCodeRedemption[]
+
+  @@unique([giveawayId, code])
+  @@index([giveawayId])
+}
+
+model EntryCodeRedemption {
+  id         String   @id @default(cuid())
+  codeId     String
+  entryId    String   @unique
+  redeemedAt DateTime @default(now())
+
+  code  EntryCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  entry Entry     @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([codeId])
+}
+
+// ---------------------------------------------------------------------------
+// Winners
+// ---------------------------------------------------------------------------
+
+model Winner {
+  id         String       @id @default(cuid())
+  giveawayId String
+  entryId    String       @unique
+  userId     String
+  rank       Int          @default(1)
+  method     WinnerMethod
+  selectedAt DateTime     @default(now())
+
+  giveaway Giveaway @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
+  entry    Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([giveawayId, rank])
+  @@index([giveawayId])
+}
+
+// ---------------------------------------------------------------------------
+// Audit log (team actions)
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  teamId    String
+  actorId   String?
+  action    String // e.g. "giveaway.create", "winners.draw", "codes.generate"
+  target    String? // affected entity id
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([teamId, createdAt])
+}
