@@ -2,7 +2,11 @@ import Link from "next/link";
 import { Mail, Trophy, Crown, Globe, MessageCircle, CheckCircle2 } from "lucide-react";
 
 import { requireUser } from "@/lib/session";
-import { getSocialConnectionsForUser } from "@/server/queries/teams";
+import {
+  getSocialConnectionsForUser,
+  connectionLabel,
+  type SocialConnectionSummary,
+} from "@/server/queries/teams";
 import { getPrimaryWallet, getUserWins } from "@/server/queries/profile";
 import { integrations } from "@/lib/env";
 import { formatDate } from "@/lib/format";
@@ -174,17 +178,33 @@ function ConnectionRow({
   provider,
   label,
 }: {
-  connected: { provider: string; username: string | null } | null;
+  connected: SocialConnectionSummary | null;
   oauthLive: boolean;
   provider: "twitter" | "discord";
   label: string;
 }) {
   if (connected) {
+    const name = connectionLabel(connected);
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300">
-        <CheckCircle2 className="h-3.5 w-3.5" />
-        {connected.username ? `Connected as @${connected.username}` : "Connected"}
-      </span>
+      <div className="flex items-center gap-2.5">
+        {connected.avatarUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={connected.avatarUrl}
+            alt=""
+            className="h-8 w-8 rounded-full border border-border object-cover"
+          />
+        )}
+        <div className="min-w-0">
+          {name && (
+            <p className="truncate text-sm font-medium text-white">{name}</p>
+          )}
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-300">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Connected
+          </span>
+        </div>
+      </div>
     );
   }
   if (!oauthLive) {

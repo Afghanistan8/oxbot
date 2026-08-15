@@ -43,7 +43,11 @@ function toLocalInputValue(d: Date): string {
   )}:${pad(d.getMinutes())}`;
 }
 
-type ConnectionSummary = { provider: string; username: string | null } | null;
+type ConnectionSummary = {
+  provider: string;
+  username: string | null;
+  displayName: string | null;
+} | null;
 
 /**
  * TeamSettingsForm — project brand, branding assets, connected socials +
@@ -436,10 +440,14 @@ function ConnectionBadge({
   oauthLive: boolean;
 }) {
   if (connection) {
+    // Prefer the true @handle; fall back to the provider display name.
+    const name = connection.username
+      ? `@${connection.username}`
+      : connection.displayName;
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
         <CheckCircle2 className="h-3 w-3" />
-        {connection.username ? `Verified as @${connection.username}` : "Verified"}
+        {name ? `Verified as ${name}` : "Verified"}
       </span>
     );
   }

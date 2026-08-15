@@ -73,7 +73,12 @@ export async function getTeamDetail(slug: string) {
 
 export type TeamDetail = NonNullable<Awaited<ReturnType<typeof getTeamDetail>>>;
 
-export type SocialConnectionSummary = { provider: string; username: string | null };
+export type SocialConnectionSummary = {
+  provider: string;
+  username: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+};
 
 /** The viewer's own connected X/Discord identities (for "connect to verify" UI). */
 export async function getSocialConnectionsForUser(
@@ -81,8 +86,20 @@ export async function getSocialConnectionsForUser(
 ): Promise<SocialConnectionSummary[]> {
   return db.socialConnection.findMany({
     where: { userId, provider: { in: ["twitter", "discord"] } },
-    select: { provider: true, username: true },
+    select: { provider: true, username: true, displayName: true, avatarUrl: true },
   });
+}
+
+/**
+ * How to label a connected account: the true @handle when we have one,
+ * otherwise the provider display name. Returns null when neither is known.
+ */
+export function connectionLabel(
+  c: Pick<SocialConnectionSummary, "username" | "displayName"> | null
+): string | null {
+  if (!c) return null;
+  if (c.username) return `@${c.username}`;
+  return c.displayName ?? null;
 }
 
 /** The first team a user belongs to (used to default the dashboard). */

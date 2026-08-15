@@ -3,7 +3,7 @@
 import { AuthError } from "next-auth";
 
 import { signIn, signOut } from "@/lib/auth";
-import { integrations } from "@/lib/env";
+import { env } from "@/lib/env";
 import { getLastMockMagicLink } from "@/lib/integrations/email";
 
 /**
@@ -36,7 +36,15 @@ export async function emailSignInAction(
   try {
     // redirect:false so we can render our own "check your email" state.
     await signIn("nodemailer", { email, redirectTo: callbackUrl, redirect: false });
-    const devMagicLink = integrations.email.live ? undefined : getLastMockMagicLink(email) ?? undefined;
+
+    // SECURITY: never return the magic link to the browser in production.
+    // Doing so would let anyone sign in as any address just by typing it.
+    // This convenience is strictly a local-development affordance, so it is
+    // gated on NODE_ENV — not merely on "is SMTP configured".
+    const devMagicLink =
+      env.NODE_ENV === "production"
+        ? undefined
+        : getLastMockMagicLink(email) ?? undefined;
     return { sent: true, email, devMagicLink };
   } catch (err) {
     if (err instanceof AuthError) {

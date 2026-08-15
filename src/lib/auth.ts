@@ -77,6 +77,42 @@ function buildProviders(): Provider[] {
   return providers;
 }
 
+/**
+ * Best-effort lookup of the provider's true @handle, which the normalized
+ * Auth.js profile doesn't expose (it only carries a display name).
+ *
+ * Deliberately non-fatal: any failure returns null and the UI falls back to the
+ * display name. Sign-in must never break because a profile lookup hiccuped.
+ * Runs once per account link, not per request.
+ */
+async function fetchProviderHandle(
+  provider: "twitter" | "discord",
+  accessToken: string | null | undefined
+): Promise<string | null> {
+  if (!accessToken) return null;
+  try {
+    const url =
+      provider === "discord"
+        ? "https://discord.com/api/v10/users/@me"
+        : "https://api.x.com/2/users/me";
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as Record<string, unknown>;
+    // Discord: { username, ... }   Twitter v2: { data: { username, ... } }
+    const raw =
+      provider === "discord"
+        ? json
+        : ((json.data as Record<string, unknown> | undefined) ?? {});
+    return typeof raw.username === "string" ? raw.username : null;
+  } catch (e) {
+    console.warn(`[auth] ${provider} handle lookup failed:`, e);
+    return null;
+  }
+}
+
 export const authConfig: NextAuthConfig = {
   adapter: PrismaAdapter(db),
   providers: buildProviders(),
@@ -100,37 +136,23 @@ export const authConfig: NextAuthConfig = {
   },
   events: {
     /**
-     * Capture the provider's own profile (username/avatar) into
-     * SocialConnection whenever an X or Discord account is linked, so the app
-     * can show "connected as @handle" without re-querying the provider API.
+     * Capture the linked X / Discord identity into SocialConnection so the app
+     * can show "connected as …" without re-querying the provider on every render.
      */
     async linkAccount({ user, account, profile }) {
       if (account.provider !== "twitter" && account.provider !== "discord") return;
       if (!user.id) return;
 
-      let username: string | null = null;
-      let displayName: string | null = null;
-      let avatarUrl: string | null = null;
-
-      if (account.provider === "twitter") {
-        // OAuth 2.0 Twitter API v2 profile shape: { data: { id, username, name, profile_image_url } }
-        const raw = profile as { data?: Record<string, unknown> } | undefined;
-        const data = raw?.data ?? (profile as Record<string, unknown> | undefined) ?? {};
-        username = typeof data.username === "string" ? data.username : null;
-        displayName = typeof data.name === "string" ? data.name : null;
-        avatarUrl = typeof data.profile_image_url === "string" ? data.profile_image_url : null;
-      } else {
-        const p = (profile as Record<string, unknown>) ?? {};
-        username = typeof p.username === "string" ? p.username : null;
-        displayName =
-          typeof p.global_name === "string" ? p.global_name : (username ?? null);
-        const discordId = typeof p.id === "string" ? p.id : null;
-        const avatarHash = typeof p.avatar === "string" ? p.avatar : null;
-        avatarUrl =
-          discordId && avatarHash
-            ? `https://cdn.discordapp.com/avatars/${discordId}/${avatarHash}.png`
-            : null;
-      }
+      // IMPORTANT: Auth.js passes the provider's *normalized* profile here —
+      // `{ id, name, email, image }` — not the raw OAuth payload. (`id` is a
+      // freshly generated user id, NOT the provider's id, so the provider id
+      // must come from `account.providerAccountId`.) Both the Discord and
+      // Twitter providers collapse handle + display name into `name`, so the
+      // true @handle is only available via a follow-up API call below.
+      const p = (profile ?? {}) as { name?: unknown; image?: unknown };
+      const displayName = typeof p.name === "string" ? p.name : null;
+      const avatarUrl = typeof p.image === "string" ? p.image : null;
+      const username = await fetchProviderHandle(account.provider, account.access_token);
 
       await db.socialConnection.upsert({
         where: { userId_provider: { userId: user.id, provider: account.provider } },
