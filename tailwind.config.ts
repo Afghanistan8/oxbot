@@ -1,4 +1,8 @@
 import type { Config } from "tailwindcss";
+// ESM import rather than require(): Node parses this .ts config as an ES
+// module, where `require` is not defined — a bare require() here crashes
+// config loading outright.
+import tailwindcssAnimate from "tailwindcss-animate";
 
 /**
  * oxbot design system — "a premium Web3 giveaway platform with a fierce, elegant red soul."
@@ -163,7 +167,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [tailwindcssAnimate],
 };
 
 export default config;
