@@ -1,26 +1,13 @@
 import { resolveTeamPage } from "@/server/queries/require-team-page";
 import { getSocialConnectionsForUser } from "@/server/queries/teams";
 import { getCurrentUserId } from "@/lib/session";
-import { env, integrations } from "@/lib/env";
+import { integrations } from "@/lib/env";
+import { discordBotInviteUrl } from "@/lib/discord-invite";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { TeamSettingsForm } from "@/components/dashboard/team-settings-form";
 import { Card, CardContent } from "@/components/ui/card";
 
 export const metadata = { title: "Project settings" };
-
-// Discord "Manage Roles" permission bit — the minimum needed to verify guild
-// membership/roles and assign winner roles once the bot is invited.
-const DISCORD_BOT_PERMISSIONS = "268435456";
-
-function discordBotInviteUrl(): string | null {
-  if (!integrations.discord.oauthLive) return null;
-  const params = new URLSearchParams({
-    client_id: env.AUTH_DISCORD_ID,
-    permissions: DISCORD_BOT_PERMISSIONS,
-    scope: "bot applications.commands",
-  });
-  return `https://discord.com/api/oauth2/authorize?${params.toString()}`;
-}
 
 /**
  * Project settings — brand, socials, chains, mint details. Requires ADMIN or OWNER.

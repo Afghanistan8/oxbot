@@ -10,6 +10,7 @@ import {
   Plus,
   ChevronsUpDown,
   Check,
+  BookOpen,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -114,6 +115,14 @@ export function DashboardNav({ teams }: { teams: TeamListItem[] }) {
           New giveaway
         </Link>
       )}
+
+      <Link
+        href="/guide"
+        className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/30 hover:text-white"
+      >
+        <BookOpen className="h-4 w-4" />
+        How to use
+      </Link>
     </nav>
   );
 }

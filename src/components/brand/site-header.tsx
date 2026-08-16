@@ -27,7 +27,7 @@ export async function SiteHeader() {
           <Logo />
           <nav className="hidden items-center gap-1 md:flex">
             <NavLink href="/">Explore</NavLink>
-            <NavLink href="/#how-it-works">How it works</NavLink>
+            <NavLink href="/guide">How it works</NavLink>
             <NavLink href="/dashboard">For projects</NavLink>
           </nav>
         </div>

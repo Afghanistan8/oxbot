@@ -1,4 +1,5 @@
-import { ShieldCheck, Dices, Zap, KeyRound, Trophy } from "lucide-react";
+import Link from "next/link";
+import { ShieldCheck, Dices, Zap, KeyRound, Trophy, ArrowRight } from "lucide-react";
 
 /**
  * HowItWorks — marketing section explaining the founder + participant flow and
@@ -49,6 +50,12 @@ export function HowItWorks() {
         <p className="mt-4 text-muted-foreground">
           Everything you need to run a fair, private, on-brand giveaway.
         </p>
+        <Link
+          href="/guide"
+          className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-scarlet-soft hover:text-white"
+        >
+          Read the full guide <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
       </div>
 
       {/* Steps */}

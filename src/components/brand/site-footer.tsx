@@ -33,6 +33,7 @@ export async function SiteFooter() {
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
             <FooterCol title="Platform">
               <FooterLink href="/">Explore giveaways</FooterLink>
+              <FooterLink href="/guide">How to use</FooterLink>
               <FooterLink href="/dashboard">Project dashboard</FooterLink>
               <FooterLink href={createGiveawayHref}>Create giveaway</FooterLink>
             </FooterCol>
