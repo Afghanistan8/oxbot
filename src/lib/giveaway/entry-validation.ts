@@ -155,23 +155,19 @@ export async function checkRequirement(
       return { ok: r.ok, mocked: r.mocked, detail: r.detail };
     }
 
-    case "DISCORD_MEMBER": {
-      if (!discordServerId) {
-        return { ok: false, mocked: false, detail: "Misconfigured task — no Discord server linked." };
-      }
-      const r = await verifyGuildMember(accounts.discordUserId, discordServerId);
-      return { ok: r.ok, mocked: r.mocked, detail: r.detail };
-    }
-
+    // Both Discord tasks share one path: when the founder selected roles, the
+    // entrant must hold at least one of them; with none selected it's a plain
+    // membership check. DISCORD_ROLE always has roles (schema enforces >= 1);
+    // DISCORD_MEMBER may optionally narrow to specific roles.
+    case "DISCORD_MEMBER":
     case "DISCORD_ROLE": {
       if (!discordServerId) {
         return { ok: false, mocked: false, detail: "Misconfigured task — no Discord server linked." };
       }
-      const r = await verifyGuildRoles(
-        accounts.discordUserId,
-        discordServerId,
-        config.roleIds ?? []
-      );
+      const roleIds = config.roleIds ?? [];
+      const r = roleIds.length
+        ? await verifyGuildRoles(accounts.discordUserId, discordServerId, roleIds)
+        : await verifyGuildMember(accounts.discordUserId, discordServerId);
       return { ok: r.ok, mocked: r.mocked, detail: r.detail };
     }
 

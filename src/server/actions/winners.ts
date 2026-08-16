@@ -85,10 +85,12 @@ async function recheckDiscordEligibility(
     let passes = true;
     for (const req of discordReqs) {
       const cfg = readConfig(req);
-      const res =
-        req.type === "DISCORD_ROLE"
-          ? await verifyGuildRoles(discordUserId, guildId, cfg.roleIds ?? [])
-          : await verifyGuildMember(discordUserId, guildId);
+      // Mirrors checkRequirement: roles when the founder selected any (either
+      // Discord task type may carry them), plain membership otherwise.
+      const roleIds = cfg.roleIds ?? [];
+      const res = roleIds.length
+        ? await verifyGuildRoles(discordUserId, guildId, roleIds)
+        : await verifyGuildMember(discordUserId, guildId);
       if (!res.ok) {
         passes = false;
         break;

@@ -432,8 +432,13 @@ export function GiveawayForm({
       {/* --- Social context --- */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Project links (optional)</CardTitle>
-          <CardDescription>Shown to participants on the giveaway page.</CardDescription>
+          <CardTitle className="text-base">Project links</CardTitle>
+          <CardDescription>
+            Shown to participants on the giveaway page.{" "}
+            {visibility === "PRIVATE"
+              ? "Optional for private, code-gated giveaways."
+              : "A Discord server ID is required for public and community giveaways."}
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-3">
           <div>
@@ -447,13 +452,17 @@ export function GiveawayForm({
             <FieldError errors={state.fieldErrors?.xAccount} />
           </div>
           <div>
-            <Label htmlFor="discordServerId">Discord server ID</Label>
+            <Label htmlFor="discordServerId">
+              Discord server ID
+              {visibility !== "PRIVATE" && <span className="ml-1 text-primary">*</span>}
+            </Label>
             <Input
               id="discordServerId"
               name="discordServerId"
               value={discordServerId}
               onChange={(e) => setDiscordServerId(e.target.value)}
               placeholder="123456789012345678"
+              required={visibility !== "PRIVATE"}
             />
             <FieldError errors={state.fieldErrors?.discordServerId} />
           </div>

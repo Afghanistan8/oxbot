@@ -134,7 +134,6 @@ export function serializeRequirements(drafts: ReqDraft[]): unknown[] {
       case "TWITTER_RETWEET":
         return { ...base, tweetUrl: d.tweetUrl.trim() };
       case "DISCORD_MEMBER":
-        return { ...base, inviteUrl: d.inviteUrl.trim() };
       case "DISCORD_ROLE": {
         const roleIds = d.roleIds
           .split(/[\s,]+/)
@@ -386,7 +385,7 @@ function ConfigFields({
       );
     case "DISCORD_MEMBER":
       return (
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 space-y-3">
           <Field>
             <Label htmlFor={`i-${k}`}>Server invite URL</Label>
             <Input
@@ -398,9 +397,13 @@ function ConfigFields({
               required
             />
           </Field>
-          <p className="text-xs text-muted-foreground">
-            Checked against the Discord server set under Project links below.
-          </p>
+          <DiscordRolePicker
+            roleIds={draft.roleIds}
+            onChange={(roleIds) => patch(k, { roleIds })}
+            disabled={disabled}
+            discordServerId={discordServerId}
+            optional
+          />
         </div>
       );
     case "DISCORD_ROLE":
@@ -481,11 +484,14 @@ function DiscordRolePicker({
   onChange,
   disabled,
   discordServerId,
+  optional = false,
 }: {
   roleIds: string;
   onChange: (roleIds: string) => void;
   disabled: boolean;
   discordServerId: string;
+  /** On "Join Discord", roles merely narrow the check and may be left empty. */
+  optional?: boolean;
 }) {
   const [roles, setRoles] = useState<GuildRole[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -518,7 +524,14 @@ function DiscordRolePicker({
   return (
     <Field>
       <div className="flex items-center justify-between gap-3">
-        <Label>Required roles</Label>
+        <Label>
+          Required roles{" "}
+          {optional && (
+            <span className="font-normal text-muted-foreground">
+              (optional — any member qualifies if none selected)
+            </span>
+          )}
+        </Label>
         <Button
           type="button"
           variant="outline"
@@ -595,8 +608,10 @@ function DiscordRolePicker({
       </details>
 
       <p className="text-xs text-muted-foreground">
-        Members holding any of these roles qualify. Checked against the Discord
-        server set under Project links below.
+        {optional
+          ? "Leave empty to accept any member. Select roles to require at least one of them."
+          : "Members holding any of these roles qualify."}{" "}
+        Checked against the Discord server set under Project links below.
       </p>
     </Field>
   );

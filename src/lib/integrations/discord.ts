@@ -120,11 +120,16 @@ export async function fetchGuildRoles(
       headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` },
       cache: "no-store",
     });
+    // Discord returns 404 (not 403) for a guild the bot isn't a member of, so
+    // the far more common cause is a missing invite rather than a bad ID.
     if (res.status === 404) {
-      return { ok: false, error: "Server not found — double-check the server ID." };
+      return {
+        ok: false,
+        error: "oxbot isn't in that server yet — invite the bot, or double-check the server ID.",
+      };
     }
     if (res.status === 403) {
-      return { ok: false, error: "oxbot hasn't been invited to that server yet." };
+      return { ok: false, error: "oxbot lacks permission to read roles in that server." };
     }
     if (!res.ok) {
       return { ok: false, error: `Discord returned an error (${res.status}).` };

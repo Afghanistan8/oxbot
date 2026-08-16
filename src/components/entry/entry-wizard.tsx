@@ -405,7 +405,10 @@ function taskLabel(req: PublicRequirement): string {
     case "TWITTER_RETWEET":
       return "Repost on X";
     case "DISCORD_MEMBER":
-      return "Join the Discord server";
+      // Membership can be narrowed to specific roles; say so when it is.
+      return c.roleIds?.length
+        ? "Join the Discord server with a required role"
+        : "Join the Discord server";
     case "DISCORD_ROLE":
       return "Hold the required Discord role";
     default:

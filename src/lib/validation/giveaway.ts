@@ -47,6 +47,9 @@ const requirementSchema = z.discriminatedUnion("type", [
     type: z.literal("DISCORD_MEMBER"),
     required: z.boolean().default(true),
     inviteUrl: z.string().trim().url("Enter the server's invite URL.").max(300),
+    // Optional narrowing: with roles selected this becomes "be a member AND
+    // hold one of these roles"; left empty it stays a plain membership check.
+    roleIds: z.array(z.string().trim().min(1)).default([]),
   }),
   z.object({
     type: z.literal("DISCORD_ROLE"),
@@ -95,11 +98,18 @@ const baseGiveaway = z.object({
  *  - FCFS winnersCount is the number of slots (>=1) — already covered.
  *  - CODE giveaways should have a CODE requirement OR request code generation;
  *    we auto-add a CODE requirement in the action if missing, so no hard error.
+ *  - The project's Discord server is required for public/community giveaways.
+ *    PRIVATE (code-gated) drops are exempt: they're shared directly with
+ *    invitees and don't rely on a community to reach or verify entrants.
  */
 export const giveawayFormSchema = baseGiveaway
   .refine((d) => d.endAt.getTime() > d.startAt.getTime(), {
     message: "End time must be after the start time.",
     path: ["endAt"],
+  })
+  .refine((d) => d.visibility === "PRIVATE" || Boolean(d.discordServerId), {
+    message: "A Discord server ID is required unless the giveaway is private.",
+    path: ["discordServerId"],
   })
   .refine(
     (d) =>
