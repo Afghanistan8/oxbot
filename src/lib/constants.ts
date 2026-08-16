@@ -173,3 +173,21 @@ export const ROLE_META: Record<TeamRole, { label: string; blurb: string }> = {
 export function roleAtLeast(role: TeamRole, required: TeamRole): boolean {
   return ROLE_RANK[role] >= ROLE_RANK[required];
 }
+
+// --- Profile wallets ---------------------------------------------------------
+
+/**
+ * The chains shown as fixed address slots on the profile page, in display
+ * order. Client-safe (imported by both the profile form and the server
+ * query), so it lives here rather than in a `server-only` module.
+ */
+export const PROFILE_WALLET_CHAINS = [
+  "SOLANA",
+  "ETHEREUM",
+  "ROBINHOOD",
+  "BASE",
+  "ARBITRUM",
+] as const satisfies readonly Blockchain[];
+
+/** One address per chain, keyed by chain — empty string when none is set. */
+export type WalletAddresses = Record<(typeof PROFILE_WALLET_CHAINS)[number], string>;

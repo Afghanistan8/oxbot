@@ -5,27 +5,35 @@ import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { requireUserId } from "@/lib/session";
-import { verifyCaptcha } from "@/lib/integrations/captcha";
 import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
-import { chainEnum } from "@/lib/validation/giveaway";
+import { PROFILE_WALLET_CHAINS } from "@/lib/constants";
 import { ActionState, ok, fail, runAction, zodFieldErrors } from "./_result";
 import type { Blockchain } from "@prisma/client";
 
 /**
  * Profile server actions (participant side).
  *
- * The primary wallet is the account's single main wallet, used to verify
- * WALLET entry requirements. Setting it the first time is unguarded; REPLACING
- * an already-set primary wallet requires a CAPTCHA pass, so a stolen session
- * alone can't silently swap out the wallet an account is known by.
+ * Wallets are a plain profile field, not a login credential — pasting an
+ * address for a chain replaces whatever was there before, no confirmation
+ * step. One fixed slot per supported chain.
  */
-const walletSchema = z.object({
-  chain: chainEnum,
-  address: z.string().trim().min(4, "Enter a wallet address.").max(120),
-  captchaToken: z.string().max(4000).optional().default(""),
+
+const addressField = z
+  .string()
+  .trim()
+  .max(120)
+  .optional()
+  .or(z.literal(""));
+
+const walletsSchema = z.object({
+  SOLANA: addressField,
+  ETHEREUM: addressField,
+  ROBINHOOD: addressField,
+  BASE: addressField,
+  ARBITRUM: addressField,
 });
 
-export async function setPrimaryWalletAction(
+export async function saveWalletsAction(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
@@ -35,42 +43,80 @@ export async function setPrimaryWalletAction(
     const rl = rateLimit(`wallet:${userId}`, RATE_LIMITS.mutate.limit, RATE_LIMITS.mutate.windowMs);
     if (!rl.success) return fail("Too many attempts. Please slow down.");
 
-    const parsed = walletSchema.safeParse({
-      chain: formData.get("chain"),
-      address: formData.get("address"),
-      captchaToken: formData.get("captchaToken") ?? "",
+    const parsed = walletsSchema.safeParse({
+      SOLANA: formData.get("wallet_SOLANA") ?? "",
+      ETHEREUM: formData.get("wallet_ETHEREUM") ?? "",
+      ROBINHOOD: formData.get("wallet_ROBINHOOD") ?? "",
+      BASE: formData.get("wallet_BASE") ?? "",
+      ARBITRUM: formData.get("wallet_ARBITRUM") ?? "",
     });
     if (!parsed.success) {
       return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
     }
-    const { chain, address, captchaToken } = parsed.data;
 
-    const current = await db.wallet.findFirst({
-      where: { userId, isPrimary: true },
-      select: { chain: true, address: true },
-    });
-    const isChange = current && (current.chain !== chain || current.address !== address);
+    await db.$transaction(
+      PROFILE_WALLET_CHAINS.map((chain) => {
+        const address = (parsed.data[chain] ?? "").trim();
+        if (address) {
+          return db.wallet.upsert({
+            where: { userId_chain: { userId, chain: chain as Blockchain } },
+            create: { userId, chain: chain as Blockchain, address },
+            update: { address },
+          });
+        }
+        // Blank field => clear any previously saved address for this chain.
+        return db.wallet.deleteMany({ where: { userId, chain: chain as Blockchain } });
+      })
+    );
 
-    if (isChange) {
-      const captcha = await verifyCaptcha(captchaToken || null);
-      if (!captcha.ok) {
-        return fail("Please complete the CAPTCHA to change your wallet.");
-      }
+    revalidatePath("/profile");
+    return ok(undefined, "Wallets saved.");
+  });
+}
+
+// --- Profile picture --------------------------------------------------------
+
+/**
+ * Avatars are stored as a compact base64 data URL directly on `User.image`
+ * rather than as an uploaded file. The app's file-upload path
+ * (lib/integrations/uploads.ts) writes to local disk, which does not persist
+ * on serverless hosts like Vercel — a small, client-resized avatar stored
+ * inline sidesteps that entirely with zero extra infra. Capped well below the
+ * Postgres text-column practical limit.
+ */
+const MAX_DATA_URL_LENGTH = 400_000; // ~300KB of image data once base64-decoded
+
+const imageSchema = z.object({
+  image: z
+    .string()
+    .trim()
+    .max(MAX_DATA_URL_LENGTH, "Image is too large.")
+    .regex(/^data:image\/(png|jpeg|webp);base64,/, "Unsupported image format.")
+    .optional()
+    .or(z.literal("")),
+});
+
+export async function updateProfileImageAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const userId = await requireUserId();
+
+  return runAction(async () => {
+    const rl = rateLimit(`avatar:${userId}`, RATE_LIMITS.mutate.limit, RATE_LIMITS.mutate.windowMs);
+    if (!rl.success) return fail("Too many attempts. Please slow down.");
+
+    const parsed = imageSchema.safeParse({ image: formData.get("image") ?? "" });
+    if (!parsed.success) {
+      return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
     }
 
-    await db.$transaction(async (tx) => {
-      await tx.wallet.updateMany({
-        where: { userId, isPrimary: true },
-        data: { isPrimary: false },
-      });
-      await tx.wallet.upsert({
-        where: { userId_chain_address: { userId, chain: chain as Blockchain, address } },
-        create: { userId, chain: chain as Blockchain, address, isPrimary: true },
-        update: { isPrimary: true },
-      });
+    await db.user.update({
+      where: { id: userId },
+      data: { image: parsed.data.image || null },
     });
 
     revalidatePath("/profile");
-    return ok(undefined, current ? "Wallet updated." : "Wallet connected.");
+    return ok(undefined, parsed.data.image ? "Profile picture updated." : "Profile picture removed.");
   });
 }

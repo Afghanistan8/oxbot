@@ -7,7 +7,7 @@ import {
   connectionLabel,
   type SocialConnectionSummary,
 } from "@/server/queries/teams";
-import { getPrimaryWallet, getUserWins } from "@/server/queries/profile";
+import { getUserWallets, getUserWins } from "@/server/queries/profile";
 import { integrations } from "@/lib/env";
 import { formatDate } from "@/lib/format";
 import { oauthSignInAction } from "@/server/actions/auth";
@@ -15,7 +15,8 @@ import { brand } from "@/lib/brand";
 
 import { SiteHeader } from "@/components/brand/site-header";
 import { SiteFooter } from "@/components/brand/site-footer";
-import { WalletForm } from "@/components/profile/wallet-form";
+import { WalletsForm } from "@/components/profile/wallet-form";
+import { ProfilePictureForm } from "@/components/profile/profile-picture-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
@@ -30,8 +31,8 @@ export const dynamic = "force-dynamic";
 export default async function ProfilePage() {
   const user = await requireUser("/profile");
 
-  const [wallet, connections, wins] = await Promise.all([
-    getPrimaryWallet(user.id),
+  const [wallets, connections, wins] = await Promise.all([
+    getUserWallets(user.id),
     getSocialConnectionsForUser(user.id),
     getUserWins(user.id),
   ]);
@@ -52,6 +53,17 @@ export default async function ProfilePage() {
         </div>
 
         <div className="space-y-6">
+          {/* Profile picture */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Profile picture</CardTitle>
+              <CardDescription>Shown next to your name across oxbot.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ProfilePictureForm name={user.name} email={user.email} image={user.image} />
+            </CardContent>
+          </Card>
+
           {/* Email */}
           <Card>
             <CardHeader>
@@ -70,15 +82,15 @@ export default async function ProfilePage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                Crypto wallet
+                Crypto wallets
               </CardTitle>
               <CardDescription>
-                Solana, Ethereum, Robinhood Chain, Arbitrum, and more. Used to satisfy
-                wallet entry requirements.
+                Paste an address for any chain you use. Used to satisfy wallet entry
+                requirements.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <WalletForm wallet={wallet} />
+              <WalletsForm wallets={wallets} />
             </CardContent>
           </Card>
 

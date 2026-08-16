@@ -1,7 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import type { Blockchain } from "@prisma/client";
+import { PROFILE_WALLET_CHAINS, type WalletAddresses } from "@/lib/constants";
 
 /**
  * Queries backing the participant-facing /profile page — the signed-in
@@ -9,14 +9,15 @@ import type { Blockchain } from "@prisma/client";
  * the caller's own userId; never accepts an arbitrary id from the client.
  */
 
-export type PrimaryWallet = { chain: Blockchain; address: string; verified: boolean } | null;
-
-export async function getPrimaryWallet(userId: string): Promise<PrimaryWallet> {
-  const wallet = await db.wallet.findFirst({
-    where: { userId, isPrimary: true },
-    select: { chain: true, address: true, verified: true },
+export async function getUserWallets(userId: string): Promise<WalletAddresses> {
+  const rows = await db.wallet.findMany({
+    where: { userId, chain: { in: [...PROFILE_WALLET_CHAINS] } },
+    select: { chain: true, address: true },
   });
-  return wallet;
+  const byChain = new Map(rows.map((r) => [r.chain, r.address]));
+  return Object.fromEntries(
+    PROFILE_WALLET_CHAINS.map((c) => [c, byChain.get(c) ?? ""])
+  ) as WalletAddresses;
 }
 
 export type WinSummary = {
