@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { Trophy, Crown, Dices, RefreshCw, Loader2, ShieldCheck } from "lucide-react";
+import { Trophy, Crown, Dices, RefreshCw, Loader2, ShieldCheck, Download } from "lucide-react";
 import type { GiveawayType, WinnerMethod } from "@prisma/client";
 
 import { drawWinnersAction, rerollWinnersAction } from "@/server/actions/winners";
@@ -37,6 +37,7 @@ const METHOD_LABEL: Record<WinnerMethod, string> = {
 
 export function WinnersPanel({
   giveawayId,
+  teamSlug,
   phase,
   type,
   winnersCount,
@@ -47,6 +48,7 @@ export function WinnersPanel({
   canManage,
 }: {
   giveawayId: string;
+  teamSlug: string;
   phase: GiveawayPhase;
   type: GiveawayType;
   winnersCount: number;
@@ -91,24 +93,32 @@ export function WinnersPanel({
             Winners
           </CardTitle>
           {hasWinners && canManage && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={pending}
-              onClick={() =>
-                run(
-                  () => rerollWinnersAction(giveawayId),
-                  "Re-roll winners? The current winners are discarded and a fresh draw is run with a new seed."
-                )
-              }
-            >
-              {pending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              Re-roll
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button asChild variant="outline" size="sm">
+                <a href={`/dashboard/${teamSlug}/giveaways/${giveawayId}/export/winners`}>
+                  <Download className="h-4 w-4" />
+                  Download winners
+                </a>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pending}
+                onClick={() =>
+                  run(
+                    () => rerollWinnersAction(giveawayId),
+                    "Re-roll winners? The current winners are discarded and a fresh draw is run with a new seed."
+                  )
+                }
+              >
+                {pending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Re-roll
+              </Button>
+            </div>
           )}
         </div>
       </CardHeader>

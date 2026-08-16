@@ -92,7 +92,10 @@ export function emptyDraft(type: RequirementType): ReqDraft {
   return {
     key: nextReqKey(),
     type,
-    required: type === "WALLET" ? false : true,
+    // Every task is required to enter — WALLET used to default to optional,
+    // but a giveaway with a winners export keyed on wallet address needs
+    // every entrant to have actually provided one.
+    required: true,
     handle: "",
     tweetUrl: "",
     roleIds: "",
@@ -142,7 +145,10 @@ export function serializeRequirements(drafts: ReqDraft[]): unknown[] {
         return { ...base, roleIds, inviteUrl: d.inviteUrl.trim() };
       }
       case "WALLET": {
-        const out: Record<string, unknown> = { ...base };
+        // Force required regardless of draft state — old drafts hydrated
+        // from a giveaway saved before WALLET was always-required could
+        // otherwise carry required:false through with no UI to fix it.
+        const out: Record<string, unknown> = { ...base, required: true };
         if (d.chain) out.chain = d.chain;
         return out;
       }
@@ -286,18 +292,23 @@ export function RequirementBuilder({
 
                 {err && <p className="mt-2 text-xs text-amber-300/90">{err}</p>}
 
-                {/* Required toggle (WALLET is optional in Phase 1) */}
-                <div className="mt-3 flex items-center gap-2">
-                  <Switch
-                    id={`req-${draft.key}`}
-                    checked={draft.required}
-                    onCheckedChange={(v) => patch(draft.key, { required: v })}
-                    disabled={disabled}
-                  />
-                  <Label htmlFor={`req-${draft.key}`} className="text-xs text-muted-foreground">
-                    {draft.required ? "Required to enter" : "Optional bonus task"}
-                  </Label>
-                </div>
+                {draft.type === "WALLET" ? (
+                  // Always required — a winners export keyed on wallet address
+                  // needs every entrant to have actually provided one.
+                  <p className="mt-3 text-xs font-medium text-scarlet-soft">Required to enter</p>
+                ) : (
+                  <div className="mt-3 flex items-center gap-2">
+                    <Switch
+                      id={`req-${draft.key}`}
+                      checked={draft.required}
+                      onCheckedChange={(v) => patch(draft.key, { required: v })}
+                      disabled={disabled}
+                    />
+                    <Label htmlFor={`req-${draft.key}`} className="text-xs text-muted-foreground">
+                      {draft.required ? "Required to enter" : "Optional bonus task"}
+                    </Label>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -442,7 +453,7 @@ function ConfigFields({
     case "WALLET":
       return (
         <Field className="mt-3">
-          <Label htmlFor={`c-${k}`}>Chain (optional)</Label>
+          <Label htmlFor={`c-${k}`}>Chain</Label>
           <select
             id={`c-${k}`}
             value={draft.chain}

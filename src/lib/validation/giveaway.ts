@@ -61,7 +61,10 @@ const requirementSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("WALLET"),
-    required: z.boolean().default(false),
+    // Always required — enforced here too, not just client-side, so a
+    // request that bypasses the UI can't sneak an optional wallet task past
+    // the winners export that depends on every entrant having one.
+    required: z.literal(true).default(true),
     chain: chainEnum.optional(),
   }),
 ]);

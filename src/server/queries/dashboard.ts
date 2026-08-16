@@ -343,3 +343,47 @@ export async function getGiveawayWinners(giveawayId: string): Promise<WinnerRow[
     seq: w.entry.seq,
   }));
 }
+
+export type WinnerExportRow = {
+  rank: number;
+  name: string | null;
+  email: string | null;
+  discordUsername: string | null;
+  wallet: string | null;
+  /** When the entry was completed — "time of entry" for the export. */
+  enteredAt: Date | null;
+  seq: number | null;
+};
+
+/**
+ * Winners with the fields founders actually need for prize fulfillment:
+ * entry time, Discord handle, and the wallet address used to enter. Backs the
+ * "Download winners" CSV export.
+ */
+export async function getWinnerExportRows(giveawayId: string): Promise<WinnerExportRow[]> {
+  const winners = await db.winner.findMany({
+    where: { giveawayId },
+    orderBy: { rank: "asc" },
+    include: {
+      user: { select: { id: true, name: true, email: true } },
+      entry: { select: { submittedAt: true, seq: true, metadata: true } },
+    },
+  });
+
+  const userIds = winners.map((w) => w.userId);
+  const discordConnections = await db.socialConnection.findMany({
+    where: { userId: { in: userIds }, provider: "discord" },
+    select: { userId: true, username: true },
+  });
+  const discordByUser = new Map(discordConnections.map((c) => [c.userId, c.username]));
+
+  return winners.map((w) => ({
+    rank: w.rank,
+    name: w.user.name,
+    email: w.user.email,
+    discordUsername: discordByUser.get(w.userId) ?? null,
+    wallet: walletFromMetadata(w.entry.metadata),
+    enteredAt: w.entry.submittedAt,
+    seq: w.entry.seq,
+  }));
+}

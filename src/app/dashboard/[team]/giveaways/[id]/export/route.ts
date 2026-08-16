@@ -10,6 +10,7 @@ import {
 } from "@/server/queries/dashboard";
 import { REQUIREMENT_META } from "@/lib/constants";
 import { formatDateTime } from "@/lib/format";
+import { buildCsv } from "@/lib/csv";
 
 /**
  * Private entrant CSV export — team-only.
@@ -20,18 +21,7 @@ import { formatDateTime } from "@/lib/format";
  */
 export const dynamic = "force-dynamic";
 
-/** Escape a value for a CSV cell + neutralize spreadsheet formula injection. */
-function csvCell(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return "";
-  let s = String(value);
-  // Fields like names come from user-controlled OAuth profiles; a leading
-  // =/+/-/@ could be executed as a formula by Excel/Sheets. Prefix with a quote.
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
-function buildCsv(requirements: ManagedRequirement[], rows: EntrantRow[]): string {
+function buildEntrantsCsv(requirements: ManagedRequirement[], rows: EntrantRow[]): string {
   const header = [
     "Rank",
     "Seq",
@@ -45,11 +35,9 @@ function buildCsv(requirements: ManagedRequirement[], rows: EntrantRow[]): strin
     ...requirements.map((r) => REQUIREMENT_META[r.type].short + (r.required ? "" : " (optional)")),
   ];
 
-  const lines = [header.map(csvCell).join(",")];
-
-  for (const e of rows) {
+  const csvRows = rows.map((e) => {
     const statusByReq = new Map(e.requirementStatuses.map((s) => [s.requirementId, s.status]));
-    const row = [
+    return [
       e.winnerRank ?? "",
       e.seq ?? "",
       e.name ?? "",
@@ -61,11 +49,9 @@ function buildCsv(requirements: ManagedRequirement[], rows: EntrantRow[]): strin
       e.submittedAt ? formatDateTime(e.submittedAt) : "",
       ...requirements.map((r) => statusByReq.get(r.id) ?? ""),
     ];
-    lines.push(row.map(csvCell).join(","));
-  }
+  });
 
-  // CRLF line endings for maximum spreadsheet compatibility.
-  return lines.join("\r\n") + "\r\n";
+  return buildCsv(header, csvRows);
 }
 
 export async function GET(
@@ -83,7 +69,7 @@ export async function GET(
     if (!giveaway) return new NextResponse("Not found", { status: 404 });
 
     const entrants = await getGiveawayEntrants(id);
-    const csv = buildCsv(giveaway.requirements, entrants);
+    const csv = buildEntrantsCsv(giveaway.requirements, entrants);
 
     return new NextResponse(csv, {
       status: 200,

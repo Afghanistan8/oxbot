@@ -145,6 +145,7 @@ export default async function ManageGiveawayPage({
         <div className="mt-8">
           <WinnersPanel
             giveawayId={giveaway.id}
+            teamSlug={slug}
             phase={phase}
             type={giveaway.type}
             winnersCount={giveaway.winnersCount}

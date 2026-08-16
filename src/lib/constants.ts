@@ -132,10 +132,10 @@ export const REQUIREMENT_META: Record<
     description: "Hold a required role in the Discord server.",
   },
   WALLET: {
-    label: "Connect wallet",
+    label: "Paste wallet address",
     short: "Wallet",
     icon: "wallet",
-    description: "Connect a wallet on the selected chain.",
+    description: "Enter a wallet address on the selected chain.",
   },
 };
 
