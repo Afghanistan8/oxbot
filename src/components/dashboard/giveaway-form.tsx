@@ -110,6 +110,7 @@ export function GiveawayForm({
     giveaway ? toLocalInputValue(giveaway.startAt) : ""
   );
   const [endAt, setEndAt] = useState(giveaway ? toLocalInputValue(giveaway.endAt) : "");
+  const [discordServerId, setDiscordServerId] = useState(giveaway?.discordServerId ?? "");
   useEffect(() => {
     if (mode === "create") {
       const now = new Date();
@@ -423,6 +424,7 @@ export function GiveawayForm({
             value={requirements}
             onChange={setRequirements}
             disabled={entriesLocked}
+            discordServerId={discordServerId}
           />
         </CardContent>
       </Card>
@@ -449,7 +451,8 @@ export function GiveawayForm({
             <Input
               id="discordServerId"
               name="discordServerId"
-              defaultValue={giveaway?.discordServerId ?? ""}
+              value={discordServerId}
+              onChange={(e) => setDiscordServerId(e.target.value)}
               placeholder="123456789012345678"
             />
             <FieldError errors={state.fieldErrors?.discordServerId} />

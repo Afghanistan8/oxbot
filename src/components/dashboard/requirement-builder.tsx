@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   ShieldCheck,
   Mail,
@@ -15,12 +16,17 @@ import {
   ChevronUp,
   ChevronDown,
   GripVertical,
+  Loader2,
+  RefreshCw,
+  CircleAlert,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Blockchain, RequirementType } from "@prisma/client";
 
 import { REQUIREMENT_META, ALL_CHAINS, CHAIN_META } from "@/lib/constants";
 import type { ManagedRequirement } from "@/server/queries/dashboard";
+import { fetchGuildRolesAction } from "@/server/actions/discord";
+import type { GuildRole } from "@/lib/integrations/discord";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -171,10 +177,14 @@ export function RequirementBuilder({
   value,
   onChange,
   disabled = false,
+  discordServerId = "",
 }: {
   value: ReqDraft[];
   onChange: (next: ReqDraft[]) => void;
   disabled?: boolean;
+  /** Current value of the giveaway's "Discord server ID" field (Project links),
+   *  so the DISCORD_ROLE picker knows which guild to fetch roles from. */
+  discordServerId?: string;
 }) {
   function add(type: RequirementType) {
     onChange([...value, emptyDraft(type)]);
@@ -268,7 +278,12 @@ export function RequirementBuilder({
                 </div>
 
                 {/* Per-type config */}
-                <ConfigFields draft={draft} patch={patch} disabled={disabled} />
+                <ConfigFields
+                  draft={draft}
+                  patch={patch}
+                  disabled={disabled}
+                  discordServerId={discordServerId}
+                />
 
                 {err && <p className="mt-2 text-xs text-amber-300/90">{err}</p>}
 
@@ -327,10 +342,12 @@ function ConfigFields({
   draft,
   patch,
   disabled,
+  discordServerId,
 }: {
   draft: ReqDraft;
   patch: (key: string, changes: Partial<ReqDraft>) => void;
   disabled: boolean;
+  discordServerId: string;
 }) {
   const k = draft.key;
   switch (draft.type) {
@@ -400,20 +417,12 @@ function ConfigFields({
               required
             />
           </Field>
-          <Field>
-            <Label htmlFor={`r-${k}`}>Required roles</Label>
-            <Input
-              id={`r-${k}`}
-              value={draft.roleIds}
-              onChange={(e) => patch(k, { roleIds: e.target.value })}
-              placeholder="Comma-separated role IDs"
-              disabled={disabled}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Members holding any of these roles qualify. Checked against the
-              Discord server set under Project links below.
-            </p>
-          </Field>
+          <DiscordRolePicker
+            roleIds={draft.roleIds}
+            onChange={(roleIds) => patch(k, { roleIds })}
+            disabled={disabled}
+            discordServerId={discordServerId}
+          />
         </div>
       );
     case "CODE":
@@ -454,4 +463,141 @@ function ConfigFields({
 
 function Field({ children, className }: { children: React.ReactNode; className?: string }) {
   return <div className={cn("space-y-1.5", className)}>{children}</div>;
+}
+
+function parseRoleIds(raw: string): Set<string> {
+  return new Set(raw.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean));
+}
+
+/**
+ * DiscordRolePicker — fetches the real roles from the server set under
+ * Project links (via the oxbot bot) and lets the founder toggle exactly
+ * which ones qualify, instead of pasting raw role IDs blind. Falls back to
+ * a plain "paste IDs" field when the bot isn't configured, the guild hasn't
+ * had the bot invited yet, or the fetch simply fails — never a dead end.
+ */
+function DiscordRolePicker({
+  roleIds,
+  onChange,
+  disabled,
+  discordServerId,
+}: {
+  roleIds: string;
+  onChange: (roleIds: string) => void;
+  disabled: boolean;
+  discordServerId: string;
+}) {
+  const [roles, setRoles] = useState<GuildRole[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const selected = parseRoleIds(roleIds);
+  const guildId = discordServerId.trim();
+
+  async function load() {
+    if (!guildId) return;
+    setLoading(true);
+    setError(null);
+    const res = await fetchGuildRolesAction(guildId);
+    setLoading(false);
+    if (res.ok) {
+      setRoles(res.roles);
+    } else {
+      setRoles(null);
+      setError(res.error);
+    }
+  }
+
+  function toggleRole(id: string) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange([...next].join(", "));
+  }
+
+  return (
+    <Field>
+      <div className="flex items-center justify-between gap-3">
+        <Label>Required roles</Label>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled || loading || !guildId}
+          onClick={load}
+        >
+          {loading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : roles ? (
+            <RefreshCw className="h-3.5 w-3.5" />
+          ) : (
+            <MessageCircle className="h-3.5 w-3.5" />
+          )}
+          {roles ? "Refresh roles" : "Load roles from Discord"}
+        </Button>
+      </div>
+
+      {!guildId && (
+        <p className="text-xs text-muted-foreground">
+          Set a Discord server ID under Project links below, then load its roles.
+        </p>
+      )}
+
+      {error && (
+        <p className="flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+          <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {error}
+        </p>
+      )}
+
+      {roles && (
+        <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-ink-black/30 p-3">
+          {roles.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              This server has no assignable roles besides @everyone.
+            </p>
+          ) : (
+            roles.map((role) => {
+              const active = selected.has(role.id);
+              return (
+                <button
+                  key={role.id}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => toggleRole(role.id)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
+                    active
+                      ? "border-primary/60 bg-primary/15 text-white shadow-glow-red"
+                      : "border-border bg-card/40 text-muted-foreground hover:border-primary/40 hover:text-white"
+                  )}
+                >
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: role.color }} />
+                  {role.name}
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      <details className="group">
+        <summary className="cursor-pointer text-xs text-muted-foreground hover:text-white">
+          {roles ? "Or edit role IDs manually" : "Paste role IDs manually instead"}
+        </summary>
+        <Input
+          value={roleIds}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Comma-separated role IDs"
+          disabled={disabled}
+          className="mt-2"
+        />
+      </details>
+
+      <p className="text-xs text-muted-foreground">
+        Members holding any of these roles qualify. Checked against the Discord
+        server set under Project links below.
+      </p>
+    </Field>
+  );
 }

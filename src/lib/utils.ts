@@ -9,8 +9,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** Build an absolute URL from a path using the configured base URL. */
+/**
+ * Build an absolute URL from a path using the configured base URL.
+ * Passes already-absolute URLs (e.g. an R2/S3 public URL) through unchanged —
+ * callers may hold either a relative local-upload path or a fully-qualified
+ * remote one, and link unfurlers (Discord, WhatsApp, X) require absolute URLs.
+ */
 export function absoluteUrl(path: string) {
+  if (/^https?:\/\//i.test(path)) return path;
   const base =
     process.env.NEXTAUTH_URL ??
     process.env.AUTH_URL ??

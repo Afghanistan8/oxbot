@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Archivo, JetBrains_Mono } from "next/font/google";
 
 import { brand } from "@/lib/brand";
+import { absoluteUrl } from "@/lib/utils";
 import { Providers } from "@/components/providers";
 import { MockModeBanner } from "@/components/brand/mock-mode-banner";
 
@@ -27,7 +28,18 @@ const jetbrains = JetBrains_Mono({
   display: "swap",
 });
 
+// Absolute so relative image paths in per-page OG overrides (e.g. a local-dev
+// upload URL like "/uploads/banners/x.jpg") resolve correctly for link
+// unfurlers — Discord, WhatsApp, X, etc. all require absolute image URLs.
+const defaultOgImage = {
+  url: absoluteUrl("/og-default.jpg"),
+  width: 1200,
+  height: 630,
+  alt: `${brand.name} — Web3 Giveaways & Raffles`,
+};
+
 export const metadata: Metadata = {
+  metadataBase: new URL(absoluteUrl("/")),
   title: {
     default: `${brand.name} — Web3 Giveaways & Raffles`,
     template: `%s · ${brand.name}`,
@@ -47,11 +59,13 @@ export const metadata: Metadata = {
     description: brand.description,
     siteName: brand.name,
     type: "website",
+    images: [defaultOgImage],
   },
   twitter: {
     card: "summary_large_image",
     title: `${brand.name} — Web3 Giveaways & Raffles`,
     description: brand.description,
+    images: [defaultOgImage.url],
   },
 };
 

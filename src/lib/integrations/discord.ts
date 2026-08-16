@@ -99,3 +99,54 @@ export async function verifyGuildRoles(
     roleIds: member.roles,
   };
 }
+
+export type GuildRole = { id: string; name: string; color: string };
+
+/**
+ * List a guild's assignable roles, for the founder-side role picker (so they
+ * pick real role names instead of pasting raw snowflake IDs). Requires the
+ * bot to be a member of the guild. `@everyone` and integration-managed roles
+ * (bots, boosters, linked accounts) are excluded — not meaningful as a manual
+ * entry-requirement gate.
+ */
+export async function fetchGuildRoles(
+  guildId: string
+): Promise<{ ok: true; roles: GuildRole[] } | { ok: false; error: string }> {
+  if (!integrations.discord.botLive) {
+    return { ok: false, error: "The oxbot Discord bot isn't configured in this environment." };
+  }
+  try {
+    const res = await fetch(`${API}/guilds/${guildId}/roles`, {
+      headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` },
+      cache: "no-store",
+    });
+    if (res.status === 404) {
+      return { ok: false, error: "Server not found — double-check the server ID." };
+    }
+    if (res.status === 403) {
+      return { ok: false, error: "oxbot hasn't been invited to that server yet." };
+    }
+    if (!res.ok) {
+      return { ok: false, error: `Discord returned an error (${res.status}).` };
+    }
+    const json = (await res.json()) as Array<{
+      id: string;
+      name: string;
+      color: number;
+      position: number;
+      managed: boolean;
+    }>;
+    const roles = json
+      .filter((r) => r.name !== "@everyone" && !r.managed)
+      .sort((a, b) => b.position - a.position)
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        color: r.color ? `#${r.color.toString(16).padStart(6, "0")}` : "#99AAB5",
+      }));
+    return { ok: true, roles };
+  } catch (e) {
+    console.warn("[discord] fetchGuildRoles error:", e);
+    return { ok: false, error: "Could not reach Discord. Try again." };
+  }
+}

@@ -16,7 +16,7 @@ import { getPublicGiveaway, getPublicWinners } from "@/server/queries/public-giv
 import { getConnectedAccounts } from "@/lib/giveaway/entry-validation";
 import { giveawayPhase, PHASE_META, formatDateTime } from "@/lib/format";
 import { GIVEAWAY_TYPE_META, GIVEAWAY_VISIBILITY_META } from "@/lib/constants";
-import { formatNumber } from "@/lib/utils";
+import { formatNumber, absoluteUrl } from "@/lib/utils";
 import { brand } from "@/lib/brand";
 import { integrations } from "@/lib/env";
 
@@ -40,15 +40,39 @@ export async function generateMetadata({
   const { slug } = await params;
   const giveaway = await getPublicGiveaway(slug, null);
   if (!giveaway) return { title: "Giveaway not found" };
+
   const title = `${giveaway.title} · ${giveaway.team.name}`;
   const description = giveaway.description ?? `${giveaway.prize} — enter on ${brand.name}.`;
+  const url = absoluteUrl(`/giveaways/${slug}`);
+
+  // Always resolve to an absolute URL, and always have *some* image — link
+  // unfurlers (Discord, WhatsApp, X) won't render a preview card at all
+  // without one, and most giveaways won't have set a custom banner.
+  const image = giveaway.bannerUrl
+    ? { url: absoluteUrl(giveaway.bannerUrl), alt: giveaway.title }
+    : {
+        url: absoluteUrl("/og-default.jpg"),
+        width: 1200,
+        height: 630,
+        alt: `${giveaway.title} on ${brand.name}`,
+      };
+
   return {
     title,
     description,
     openGraph: {
       title,
       description,
-      images: giveaway.bannerUrl ? [{ url: giveaway.bannerUrl }] : undefined,
+      url,
+      siteName: brand.name,
+      type: "website",
+      images: [image],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [image.url],
     },
   };
 }
