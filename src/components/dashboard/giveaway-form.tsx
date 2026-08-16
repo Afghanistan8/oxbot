@@ -44,6 +44,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FormMessage, FieldError } from "@/components/dashboard/form-message";
+import { ImageUploadField } from "@/components/dashboard/image-upload-field";
 import {
   RequirementBuilder,
   serializeRequirements,
@@ -180,13 +181,12 @@ export function GiveawayForm({
             <FieldError errors={state.fieldErrors?.description} />
           </div>
           <div>
-            <Label htmlFor="bannerUrl">Banner image URL</Label>
-            <Input
-              id="bannerUrl"
+            <ImageUploadField
               name="bannerUrl"
-              type="url"
-              defaultValue={giveaway?.bannerUrl ?? ""}
-              placeholder="https://…"
+              label="Banner image"
+              folder="banners"
+              aspect="wide"
+              defaultValue={giveaway?.bannerUrl}
             />
             <FieldError errors={state.fieldErrors?.bannerUrl} />
           </div>
