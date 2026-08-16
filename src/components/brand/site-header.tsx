@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { auth } from "@/lib/auth";
+import { getPrimaryTeamSlug } from "@/server/queries/teams";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/brand/user-menu";
@@ -12,6 +13,12 @@ import { UserMenu } from "@/components/brand/user-menu";
 export async function SiteHeader() {
   const session = await auth();
   const user = session?.user;
+  // Giveaways are always team-scoped — route to the user's first project, or
+  // to project creation if they don't have one yet.
+  const primaryTeamSlug = user?.id ? await getPrimaryTeamSlug(user.id) : null;
+  const createGiveawayHref = primaryTeamSlug
+    ? `/dashboard/${primaryTeamSlug}/giveaways/new`
+    : "/dashboard/new";
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-ink-black/70 backdrop-blur-xl">
@@ -29,7 +36,7 @@ export async function SiteHeader() {
           {user ? (
             <>
               <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-                <Link href="/dashboard/giveaways/new">Create giveaway</Link>
+                <Link href={createGiveawayHref}>Create giveaway</Link>
               </Button>
               <UserMenu
                 name={user.name ?? null}

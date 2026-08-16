@@ -1,12 +1,26 @@
 import Link from "next/link";
 
 import { brand } from "@/lib/brand";
+import { auth } from "@/lib/auth";
+import { getPrimaryTeamSlug } from "@/server/queries/teams";
 import { Logo } from "@/components/brand/logo";
 
 /**
  * SiteFooter — brand mark, quick links, and a crimson divider.
  */
-export function SiteFooter() {
+export async function SiteFooter() {
+  const session = await auth();
+  const userId = session?.user?.id;
+  const primaryTeamSlug = userId ? await getPrimaryTeamSlug(userId) : null;
+  // Giveaways are always team-scoped: send signed-out visitors to sign in,
+  // signed-in users with a project straight to it, and everyone else to
+  // project creation first.
+  const createGiveawayHref = !userId
+    ? "/signin?callbackUrl=/dashboard/new"
+    : primaryTeamSlug
+      ? `/dashboard/${primaryTeamSlug}/giveaways/new`
+      : "/dashboard/new";
+
   return (
     <footer className="mt-24 border-t border-border/60 bg-ink-black/40">
       <div className="container py-12">
@@ -20,7 +34,7 @@ export function SiteFooter() {
             <FooterCol title="Platform">
               <FooterLink href="/">Explore giveaways</FooterLink>
               <FooterLink href="/dashboard">Project dashboard</FooterLink>
-              <FooterLink href="/dashboard/giveaways/new">Create giveaway</FooterLink>
+              <FooterLink href={createGiveawayHref}>Create giveaway</FooterLink>
             </FooterCol>
             <FooterCol title="Account">
               <FooterLink href="/signin">Sign in</FooterLink>
