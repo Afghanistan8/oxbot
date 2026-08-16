@@ -1,16 +1,36 @@
 import { randomBytes } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-import { integrations } from "@/lib/env";
+import { env, integrations } from "@/lib/env";
 
 /**
  * Uploads integration.
  *
- * Live mode: pushes to S3-compatible storage (stub — wire your SDK of choice).
- * Mock mode: writes to `public/uploads` and returns a local URL, so image
- * uploads work in development with no cloud storage.
+ * Live mode: pushes to S3-compatible storage (Cloudflare R2, AWS S3, or any
+ * other S3-compatible provider — same client, just point S3_ENDPOINT at it).
+ * Mock mode: writes to `public/uploads` and returns a local URL. Mock mode is
+ * also what runs on Vercel if S3_* isn't configured — Vercel's filesystem is
+ * read-only outside /tmp, so that write would fail; live mode is required for
+ * uploads to actually work on a serverless deploy.
  */
+
+let s3Client: S3Client | null = null;
+
+function getS3Client(): S3Client {
+  if (!s3Client) {
+    s3Client = new S3Client({
+      region: env.S3_REGION || "auto",
+      endpoint: env.S3_ENDPOINT,
+      credentials: {
+        accessKeyId: env.S3_ACCESS_KEY_ID,
+        secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+      },
+    });
+  }
+  return s3Client;
+}
 
 export type UploadResult = { url: string; mocked: boolean };
 
@@ -53,11 +73,18 @@ export async function storeUpload(
   const name = `${Date.now()}-${randomBytes(6).toString("hex")}.${extForType(file.type)}`;
 
   if (integrations.uploads.live) {
-    // TODO(phase-2): push `bytes` to S3 (AWS SDK / R2) and return S3_PUBLIC_URL.
-    // Intentionally not implemented in Phase 1; live keys are documented in .env.example.
-    throw new Error(
-      "S3 uploads are not wired yet. Remove S3_* env vars to use local (mock) uploads."
+    const key = `${folder}/${name}`;
+    await getS3Client().send(
+      new PutObjectCommand({
+        Bucket: env.S3_BUCKET,
+        Key: key,
+        Body: bytes,
+        ContentType: file.type,
+        CacheControl: "public, max-age=31536000, immutable",
+      })
     );
+    const base = env.S3_PUBLIC_URL.replace(/\/$/, "");
+    return { url: `${base}/${key}`, mocked: false };
   }
 
   // Mock: write under public/uploads/<folder>/
