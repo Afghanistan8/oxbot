@@ -74,7 +74,13 @@ export async function verifyFollows(
         console.warn("[twitter] following endpoint not permitted on this tier; allowing.");
         return { ok: true, mocked: true, detail: "API tier limited; allowed." };
       }
-      if (!res.ok) break;
+      if (!res.ok) {
+        // Rate limit (429) or a transient X API error mid-check. This is
+        // inconclusive — NOT proof the user doesn't follow — so we must not
+        // hard-fail a possibly-legitimate entrant over our own infra hiccup.
+        console.warn(`[twitter] follow check got ${res.status}; allowing (inconclusive).`);
+        return { ok: true, mocked: true, detail: "Check unavailable; allowed." };
+      }
       const json = (await res.json()) as {
         data?: { id: string }[];
         meta?: { next_token?: string };
@@ -112,7 +118,10 @@ export async function verifyLiked(
       if (res.status === 403) {
         return { ok: true, mocked: true, detail: "API tier limited; allowed." };
       }
-      if (!res.ok) break;
+      if (!res.ok) {
+        console.warn(`[twitter] like check got ${res.status}; allowing (inconclusive).`);
+        return { ok: true, mocked: true, detail: "Check unavailable; allowed." };
+      }
       const json = (await res.json()) as {
         data?: { id: string }[];
         meta?: { next_token?: string };
@@ -150,7 +159,10 @@ export async function verifyReposted(
       if (res.status === 403) {
         return { ok: true, mocked: true, detail: "API tier limited; allowed." };
       }
-      if (!res.ok) break;
+      if (!res.ok) {
+        console.warn(`[twitter] repost check got ${res.status}; allowing (inconclusive).`);
+        return { ok: true, mocked: true, detail: "Check unavailable; allowed." };
+      }
       const json = (await res.json()) as {
         data?: { id: string }[];
         meta?: { next_token?: string };

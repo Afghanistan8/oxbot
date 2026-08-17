@@ -18,13 +18,22 @@ export type DiscordCheckResult = {
 const API = "https://discord.com/api/v10";
 
 /**
- * Fetch a guild member object for `discordUserId` in `guildId`.
- * Returns null if not a member (404) or on error.
+ * Result of a guild-member lookup:
+ *  - "member": a definitive yes, with their role ids.
+ *  - "absent": a definitive no (404) — the user really isn't in the server.
+ *  - "error": inconclusive (rate limit, missing intent, bot removed, network).
+ *    We must NOT treat this as "not a member" — that would wrongly reject real
+ *    members whenever Discord hiccups or the bot is misconfigured.
  */
+type MemberLookup =
+  | { kind: "member"; roles: string[] }
+  | { kind: "absent" }
+  | { kind: "error" };
+
 async function fetchGuildMember(
   guildId: string,
   discordUserId: string
-): Promise<{ roles: string[] } | null> {
+): Promise<MemberLookup> {
   try {
     const res = await fetch(
       `${API}/guilds/${guildId}/members/${discordUserId}`,
@@ -33,16 +42,16 @@ async function fetchGuildMember(
         cache: "no-store",
       }
     );
-    if (res.status === 404) return null; // not a member
+    if (res.status === 404) return { kind: "absent" }; // definitively not a member
     if (!res.ok) {
-      console.warn(`[discord] member fetch failed (${res.status}).`);
-      return null;
+      console.warn(`[discord] member fetch failed (${res.status}); treating as inconclusive.`);
+      return { kind: "error" };
     }
     const json = (await res.json()) as { roles?: string[] };
-    return { roles: json.roles ?? [] };
+    return { kind: "member", roles: json.roles ?? [] };
   } catch (e) {
     console.warn("[discord] member fetch error:", e);
-    return null;
+    return { kind: "error" };
   }
 }
 
@@ -58,8 +67,11 @@ export async function verifyGuildMember(
     return { ok: false, mocked: false, detail: "No connected Discord account." };
   }
   const member = await fetchGuildMember(guildId, discordUserId);
-  if (!member) {
+  if (member.kind === "absent") {
     return { ok: false, mocked: false, detail: "Not a member of the server." };
+  }
+  if (member.kind === "error") {
+    return { ok: true, mocked: true, detail: "Membership check unavailable; allowed." };
   }
   return { ok: true, mocked: false, detail: "Member", roleIds: member.roles };
 }
@@ -85,8 +97,11 @@ export async function verifyGuildRoles(
     return { ok: false, mocked: false, detail: "No connected Discord account." };
   }
   const member = await fetchGuildMember(guildId, discordUserId);
-  if (!member) {
+  if (member.kind === "absent") {
     return { ok: false, mocked: false, detail: "Not a member of the server." };
+  }
+  if (member.kind === "error") {
+    return { ok: true, mocked: true, detail: "Role check unavailable; allowed." };
   }
   if (roleIds.length === 0) {
     return { ok: true, mocked: false, detail: "Member", roleIds: member.roles };
