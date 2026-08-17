@@ -83,6 +83,22 @@ export function TeamSettingsForm({
   const [mintTba, setMintTba] = useState(team.mintTba);
   const [mintAt, setMintAt] = useState(team.mintAt ? toLocalInputValue(team.mintAt) : "");
 
+  // The project's public X handle is a plain text field — it is NOT the same
+  // thing as the admin's personal OAuth-linked account. We only claim the
+  // handle is "verified" when the connected account actually proves ownership
+  // of it (same username), so entering "LavaFoxes" never gets falsely stamped
+  // with whatever personal account happens to be signed in.
+  const connectedXUsername = twitterConnection?.username ?? null;
+  const [xHandle, setXHandle] = useState((team.xHandle ?? "").replace(/^@+/, ""));
+  const normalizedXHandle = xHandle.replace(/^@+/, "").trim();
+  const xVerified =
+    !!normalizedXHandle &&
+    !!connectedXUsername &&
+    normalizedXHandle.toLowerCase() === connectedXUsername.toLowerCase();
+  const personalXDiffers =
+    !!connectedXUsername &&
+    normalizedXHandle.toLowerCase() !== connectedXUsername.toLowerCase();
+
   function toggleChain(chain: Blockchain) {
     setChains((prev) => {
       const next = new Set(prev);
@@ -179,8 +195,9 @@ export function TeamSettingsForm({
                   <Globe className="h-4 w-4 text-scarlet-soft" />
                   <p className="text-sm font-medium text-white">Official X (Twitter) account</p>
                 </div>
-                <ConnectionBadge
-                  connection={twitterConnection}
+                <XHandleBadge
+                  handle={normalizedXHandle}
+                  verified={xVerified}
                   oauthLive={twitterOauthLive}
                 />
               </div>
@@ -191,14 +208,24 @@ export function TeamSettingsForm({
                 <Input
                   id="xHandle"
                   name="xHandle"
-                  defaultValue={team.xHandle ?? twitterConnection?.username ?? ""}
+                  value={xHandle}
+                  onChange={(e) => setXHandle(e.target.value.replace(/^@+/, ""))}
                   placeholder="yourproject"
                   className="rounded-l-none"
                 />
               </div>
               <p className="mt-1.5 text-xs text-muted-foreground">
-                Connecting verifies ownership and auto-populates follow requirements.
+                This is your project&apos;s public handle — entrants follow it to
+                complete follow tasks. To earn the verified badge, sign in with
+                this exact X account.
               </p>
+              {personalXDiffers && (
+                <p className="mt-1 text-xs text-muted-foreground/80">
+                  Your personal <span className="text-foreground/90">@{connectedXUsername}</span>{" "}
+                  is linked for sign-in only — it doesn&apos;t have to match the
+                  project handle above.
+                </p>
+              )}
               <FieldError errors={state.fieldErrors?.xHandle} />
             </div>
 
@@ -448,6 +475,42 @@ function Section({
       {children}
     </div>
   );
+}
+
+/**
+ * Verification badge for the project's public X handle. Unlike the generic
+ * connection badge (which reflects the admin's own OAuth login), this is tied
+ * to the handle typed into the field — so it can never claim a project handle
+ * is "verified as" some unrelated personal account.
+ */
+function XHandleBadge({
+  handle,
+  verified,
+  oauthLive,
+}: {
+  handle: string;
+  verified: boolean;
+  oauthLive: boolean;
+}) {
+  if (verified) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+        <CheckCircle2 className="h-3 w-3" />
+        Verified as @{handle}
+      </span>
+    );
+  }
+  if (handle) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/50 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+        @{handle} · unverified
+      </span>
+    );
+  }
+  if (!oauthLive) {
+    return <span className="text-[11px] text-muted-foreground/70">OAuth not configured</span>;
+  }
+  return <span className="text-[11px] text-muted-foreground">Not set</span>;
 }
 
 function ConnectionBadge({
