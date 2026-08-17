@@ -157,10 +157,17 @@ export function EntryWizard(props: EntryWizardProps) {
     requirements.some((r) => r.type.startsWith("DISCORD_"));
 
   // --- Non-live phases: no entry form ---------------------------------------
+  // Still surface the task list for an upcoming giveaway so visitors can see
+  // (and get ready for) what they'll need to do before entry opens.
   if (phase !== "live") {
     return (
       <Panel>
         <ClosedState phase={phase} viewerEntry={viewerEntry} type={type} />
+        {phase === "upcoming" && requirements.length > 0 && (
+          <div className="mt-5">
+            <TaskPreview requirements={requirements} />
+          </div>
+        )}
       </Panel>
     );
   }

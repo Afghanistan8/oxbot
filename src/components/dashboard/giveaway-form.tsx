@@ -70,6 +70,23 @@ function toLocalInputValue(d: Date): string {
   )}:${pad(d.getMinutes())}`;
 }
 
+/**
+ * Convert a `datetime-local` value (a bare wall-clock string with no timezone,
+ * e.g. "2026-08-17T23:19") into an absolute UTC ISO instant.
+ *
+ * The browser parses that string in the *viewer's* local timezone, so this
+ * captures the exact moment the user picked. Without it the raw string was
+ * posted and re-parsed on the server in the server's timezone (UTC on Vercel),
+ * which shoved every schedule off by the viewer's UTC offset — a "start now"
+ * from a UTC+1 user landed an hour in the future, leaving the giveaway stuck
+ * as "upcoming" instead of going live.
+ */
+function localInputToIso(v: string): string {
+  if (!v) return "";
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+}
+
 export function GiveawayForm({
   mode,
   teamId,
@@ -135,6 +152,10 @@ export function GiveawayForm({
       <input type="hidden" name="visibility" value={visibility} />
       <input type="hidden" name="hideEntryCount" value={hideEntryCount ? "true" : "false"} />
       <input type="hidden" name="requirements" value={requirementsJson} />
+      {/* Schedule posts as absolute UTC instants (see localInputToIso) — the
+          visible datetime-local fields below carry no name so only these do. */}
+      <input type="hidden" name="startAt" value={localInputToIso(startAt)} />
+      <input type="hidden" name="endAt" value={localInputToIso(endAt)} />
 
       <FormMessage state={state} />
 
@@ -320,7 +341,6 @@ export function GiveawayForm({
             <Label htmlFor="startAt">Starts</Label>
             <Input
               id="startAt"
-              name="startAt"
               type="datetime-local"
               value={startAt}
               onChange={(e) => setStartAt(e.target.value)}
@@ -332,7 +352,6 @@ export function GiveawayForm({
             <Label htmlFor="endAt">Ends</Label>
             <Input
               id="endAt"
-              name="endAt"
               type="datetime-local"
               value={endAt}
               onChange={(e) => setEndAt(e.target.value)}
