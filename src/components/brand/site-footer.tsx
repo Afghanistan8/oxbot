@@ -12,14 +12,6 @@ export async function SiteFooter() {
   const session = await auth();
   const userId = session?.user?.id;
   const primaryTeamSlug = userId ? await getPrimaryTeamSlug(userId) : null;
-  // Giveaways are always team-scoped: send signed-out visitors to sign in,
-  // signed-in users with a project straight to it, and everyone else to
-  // project creation first.
-  const createGiveawayHref = !userId
-    ? "/signin?callbackUrl=/dashboard/new"
-    : primaryTeamSlug
-      ? `/dashboard/${primaryTeamSlug}/giveaways/new`
-      : "/dashboard/new";
 
   return (
     <footer className="mt-24 border-t border-border/60 bg-ink-black/40">
@@ -35,7 +27,11 @@ export async function SiteFooter() {
               <FooterLink href="/">Explore giveaways</FooterLink>
               <FooterLink href="/guide">How to use</FooterLink>
               <FooterLink href="/dashboard">Project dashboard</FooterLink>
-              <FooterLink href={createGiveawayHref}>Create giveaway</FooterLink>
+              {primaryTeamSlug && (
+                <FooterLink href={`/dashboard/${primaryTeamSlug}/giveaways/new`}>
+                  Create giveaway
+                </FooterLink>
+              )}
             </FooterCol>
             <FooterCol title="Account">
               <FooterLink href="/signin">Sign in</FooterLink>

@@ -27,8 +27,9 @@ export function SignInForm({
     emailSignInAction,
     {}
   );
-  // When Discord is configured it's the primary way in; email starts tucked
-  // away behind a link instead of competing for top billing.
+  // Discord is the only sign-in method offered when it's configured — X and
+  // email are only shown as a fallback on deployments without Discord set up,
+  // so nobody is ever locked out of an unconfigured environment.
   const [showEmail, setShowEmail] = useState(!discordEnabled);
 
   if (state.sent) {
@@ -87,22 +88,20 @@ export function SignInForm({
         </div>
       )}
 
-      {twitterEnabled && (
+      {/* X and email are only ever shown when Discord isn't configured on
+          this deployment — a fallback so local/dev setups still work, never
+          a real alternative once Discord is live. */}
+      {!discordEnabled && twitterEnabled && (
         <form action={oauthSignInAction}>
           <input type="hidden" name="provider" value="twitter" />
           <input type="hidden" name="callbackUrl" value={callbackUrl} />
-          <Button
-            type="submit"
-            variant={discordEnabled ? "outline" : "default"}
-            className="w-full"
-            size="lg"
-          >
+          <Button type="submit" className="w-full" size="lg">
             Continue with X
           </Button>
         </form>
       )}
 
-      {(discordEnabled || twitterEnabled) && (
+      {!discordEnabled && twitterEnabled && (
         <div className="relative py-1">
           <div className="divider-glow" />
           <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-3 text-xs text-muted-foreground">
@@ -111,48 +110,43 @@ export function SignInForm({
         </div>
       )}
 
-      {showEmail ? (
-        <form action={formAction} className="space-y-3">
-          <input type="hidden" name="callbackUrl" value={callbackUrl} />
-          <div className="space-y-1.5">
-            <Label htmlFor="email">Email address</Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              placeholder="you@wallet.eth"
-              defaultValue={state.email}
-              required
-            />
-          </div>
-          {state.error && (
-            <p className="text-xs text-destructive">{state.error}</p>
-          )}
-          <Button
-            type="submit"
-            variant={discordEnabled ? "outline" : "default"}
-            className="w-full"
-            size="lg"
-            disabled={pending}
-          >
-            {pending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Mail className="h-4 w-4" />
+      {!discordEnabled &&
+        (showEmail ? (
+          <form action={formAction} className="space-y-3">
+            <input type="hidden" name="callbackUrl" value={callbackUrl} />
+            <div className="space-y-1.5">
+              <Label htmlFor="email">Email address</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                placeholder="you@wallet.eth"
+                defaultValue={state.email}
+                required
+              />
+            </div>
+            {state.error && (
+              <p className="text-xs text-destructive">{state.error}</p>
             )}
-            {pending ? "Sending link…" : "Continue with email"}
-          </Button>
-        </form>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setShowEmail(true)}
-          className="w-full text-center text-sm text-muted-foreground underline-offset-4 hover:text-scarlet-soft hover:underline"
-        >
-          Sign in with email instead
-        </button>
-      )}
+            <Button type="submit" className="w-full" size="lg" disabled={pending}>
+              {pending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Mail className="h-4 w-4" />
+              )}
+              {pending ? "Sending link…" : "Continue with email"}
+            </Button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowEmail(true)}
+            className="w-full text-center text-sm text-muted-foreground underline-offset-4 hover:text-scarlet-soft hover:underline"
+          >
+            Sign in with email instead
+          </button>
+        ))}
     </div>
   );
 }

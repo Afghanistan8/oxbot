@@ -306,10 +306,6 @@ export function EntryWizard(props: EntryWizardProps) {
           )}
           {pending ? "Submitting…" : alreadyEntered ? "Re-check tasks" : SUBMIT_LABEL[type]}
         </Button>
-
-        <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
-          Your entry is private. Only the project team can see who entered.
-        </p>
       </form>
     </Panel>
   );

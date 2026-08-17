@@ -4,6 +4,8 @@ import { ArrowRight, Sparkles, Lock, ShieldCheck, Gift } from "lucide-react";
 import { brand } from "@/lib/brand";
 import { ALL_CHAINS } from "@/lib/constants";
 import type { Blockchain } from "@prisma/client";
+import { auth } from "@/lib/auth";
+import { getPrimaryTeamSlug } from "@/server/queries/teams";
 import {
   listPublicGiveaways,
   activePublicChains,
@@ -39,6 +41,17 @@ export default async function LandingPage({
   const sort = params.sort === "new" ? "new" : "ending";
   const liveOnly = params.live === "1";
 
+  const session = await auth();
+  const userId = session?.user?.id;
+  const primaryTeamSlug = userId ? await getPrimaryTeamSlug(userId) : null;
+  // Signed-out visitors and signed-in-without-a-project visitors never see a
+  // "launch a giveaway" CTA — only someone who already owns a project does.
+  const launchCta: { href: string; label: string } = !userId
+    ? { href: "/signin", label: "Sign in" }
+    : primaryTeamSlug
+      ? { href: `/dashboard/${primaryTeamSlug}/giveaways/new`, label: "Create giveaway" }
+      : { href: "/dashboard", label: "Go to dashboard" };
+
   // The landing page must render even before a DATABASE_URL is configured, so
   // every query degrades gracefully to an empty/zero state.
   let giveaways: GiveawayCardData[] = [];
@@ -59,7 +72,7 @@ export default async function LandingPage({
       <SiteHeader />
 
       <main>
-        <Hero liveCount={liveCount} totalShown={giveaways.length} />
+        <Hero liveCount={liveCount} totalShown={giveaways.length} launchCta={launchCta} />
 
         {/* Explore / public grid */}
         <section id="explore" className="container scroll-mt-20 py-16">
@@ -93,7 +106,7 @@ export default async function LandingPage({
               ))}
             </div>
           ) : (
-            <EmptyState hasFilters={Boolean(chain) || liveOnly} />
+            <EmptyState hasFilters={Boolean(chain) || liveOnly} launchCta={launchCta} />
           )}
         </section>
 
@@ -103,7 +116,7 @@ export default async function LandingPage({
 
         <HowItWorks />
 
-        <CtaBand />
+        <CtaBand launchCta={launchCta} />
       </main>
 
       <SiteFooter />
@@ -114,9 +127,11 @@ export default async function LandingPage({
 function Hero({
   liveCount,
   totalShown,
+  launchCta,
 }: {
   liveCount: number;
   totalShown: number;
+  launchCta: { href: string; label: string };
 }) {
   return (
     <section className="relative overflow-hidden">
@@ -143,8 +158,8 @@ function Hero({
 
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <Button asChild size="lg">
-              <Link href="/signin?callbackUrl=/dashboard">
-                Launch a giveaway
+              <Link href={launchCta.href}>
+                {launchCta.label}
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
@@ -227,7 +242,13 @@ function TrustPoint({
   );
 }
 
-function EmptyState({ hasFilters }: { hasFilters: boolean }) {
+function EmptyState({
+  hasFilters,
+  launchCta,
+}: {
+  hasFilters: boolean;
+  launchCta: { href: string; label: string };
+}) {
   return (
     <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/30 px-6 py-20 text-center">
       <div className="grid h-14 w-14 place-items-center rounded-2xl bg-crimson-gradient shadow-glow-red">
@@ -242,8 +263,8 @@ function EmptyState({ hasFilters }: { hasFilters: boolean }) {
           : "Be the first to launch one. Your community is waiting."}
       </p>
       <Button asChild className="mt-6">
-        <Link href="/signin?callbackUrl=/dashboard">
-          Launch a giveaway
+        <Link href={launchCta.href}>
+          {launchCta.label}
           <ArrowRight className="h-4 w-4" />
         </Link>
       </Button>
@@ -251,7 +272,7 @@ function EmptyState({ hasFilters }: { hasFilters: boolean }) {
   );
 }
 
-function CtaBand() {
+function CtaBand({ launchCta }: { launchCta: { href: string; label: string } }) {
   return (
     <section className="container py-20">
       <div className="relative overflow-hidden rounded-3xl border border-primary/30 bg-crimson-gradient p-10 shadow-glow-red-lg sm:p-14">
@@ -268,8 +289,8 @@ function CtaBand() {
             </p>
           </div>
           <Button asChild size="lg" variant="gold" className="shrink-0">
-            <Link href="/signin?callbackUrl=/dashboard">
-              Get started free
+            <Link href={launchCta.href}>
+              {launchCta.label}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>

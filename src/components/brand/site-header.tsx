@@ -16,9 +16,6 @@ export async function SiteHeader() {
   // Giveaways are always team-scoped — route to the user's first project, or
   // to project creation if they don't have one yet.
   const primaryTeamSlug = user?.id ? await getPrimaryTeamSlug(user.id) : null;
-  const createGiveawayHref = primaryTeamSlug
-    ? `/dashboard/${primaryTeamSlug}/giveaways/new`
-    : "/dashboard/new";
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-ink-black/70 backdrop-blur-xl">
@@ -36,9 +33,13 @@ export async function SiteHeader() {
         <div className="flex items-center justify-end gap-2">
           {user ? (
             <>
-              <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-                <Link href={createGiveawayHref}>Create giveaway</Link>
-              </Button>
+              {primaryTeamSlug && (
+                <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
+                  <Link href={`/dashboard/${primaryTeamSlug}/giveaways/new`}>
+                    Create giveaway
+                  </Link>
+                </Button>
+              )}
               <UserMenu
                 name={user.name ?? null}
                 email={user.email ?? null}
@@ -46,14 +47,9 @@ export async function SiteHeader() {
               />
             </>
           ) : (
-            <>
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/signin">Sign in</Link>
-              </Button>
-              <Button asChild size="sm">
-                <Link href="/signin?callbackUrl=/dashboard">Launch a giveaway</Link>
-              </Button>
-            </>
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/signin">Sign in</Link>
+            </Button>
           )}
         </div>
       </div>

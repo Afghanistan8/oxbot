@@ -31,7 +31,8 @@ const TOC = [
   { href: "#project", label: "1. Create your project" },
   { href: "#discord", label: "2. Connect your Discord server" },
   { href: "#giveaway", label: "3. Create a giveaway" },
-  { href: "#manage", label: "4. Publish & manage" },
+  { href: "#bot-channel", label: "4. How it runs in your Discord channel" },
+  { href: "#manage", label: "5. Publish & manage" },
   { href: "#troubleshooting", label: "Troubleshooting" },
 ];
 
@@ -85,7 +86,11 @@ export default function GuidePage() {
                 <Step
                   icon={LogIn}
                   title="Sign in"
-                  body="Discord is the fastest way in — it verifies your identity across every giveaway automatically. Email sign-in works too."
+                  body={
+                    integrations.discord.oauthLive
+                      ? "Sign in with Discord — it's the only way to create an account, and it verifies your identity across every giveaway automatically."
+                      : "Sign in to get started."
+                  }
                 />
                 <Step
                   icon={CheckCircle2}
@@ -148,8 +153,9 @@ export default function GuidePage() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-white">Invite the oxbot bot</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      This is what checks server membership and roles, and later
-                      assigns winner roles automatically.
+                      This is what checks server membership and roles when
+                      entrants complete Discord-gated tasks on the giveaway
+                      page.
                     </p>
                     {inviteUrl ? (
                       <div className="mt-3">
@@ -220,11 +226,47 @@ export default function GuidePage() {
               </Steps>
             </Section>
 
-            {/* --- 4. Manage --- */}
+            {/* --- 4. Bot & channel --- */}
+            <Section
+              id="bot-channel"
+              icon={MessageCircle}
+              title="4. How it runs in your Discord channel"
+              description="Two separate jobs — a webhook that posts, and a bot that verifies."
+            >
+              <Steps>
+                <Step
+                  icon={ExternalLink}
+                  title="Create a webhook for your giveaway channel"
+                  body="In Discord: open the channel you want giveaways posted to → Edit Channel → Integrations → Webhooks → New Webhook. Copy its URL."
+                />
+                <Step
+                  icon={FolderPlus}
+                  title="Paste the webhook URL into oxbot"
+                  body="Under your project's Settings, paste it into Discord webhook URL. This is separate from the server ID used for gating — it only controls where announcements post."
+                />
+                <Step
+                  icon={Gift}
+                  title="Publishing posts it automatically"
+                  body="The moment a giveaway is published, oxbot posts an embed to that channel — title, prize, chain, format, banner, and a live countdown to when entries close. No manual copy-paste needed."
+                />
+                <Step
+                  icon={ShieldCheck}
+                  title="The bot verifies, it doesn't post"
+                  body="The oxbot bot you invited in step 2 has one job: when someone completes a Join Discord or Hold a role task on the giveaway page, it checks their membership/roles in your server in real time. It never posts messages or runs commands in Discord."
+                />
+                <Step
+                  icon={Trophy}
+                  title="After you draw, announce winners yourself"
+                  body="oxbot doesn't auto-post or auto-DM winners to Discord today — draw them on the giveaway's dashboard, then share the results back into your channel (e.g. paste the giveaway link, which shows winners once you publish the draw)."
+                />
+              </Steps>
+            </Section>
+
+            {/* --- 5. Manage --- */}
             <Section
               id="manage"
               icon={Trophy}
-              title="4. Publish & manage"
+              title="5. Publish & manage"
               description="Everything after launch happens on the giveaway's dashboard page."
             >
               <Steps>

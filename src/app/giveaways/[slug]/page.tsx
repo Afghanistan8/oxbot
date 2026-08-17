@@ -8,7 +8,6 @@ import {
   MessageCircle,
   Send,
   CalendarClock,
-  ShieldCheck,
 } from "lucide-react";
 
 import { getCurrentUserId } from "@/lib/session";
@@ -234,14 +233,6 @@ export default async function PublicGiveawayPage({
               {/* Project links */}
               <ProjectLinks giveaway={giveaway} />
 
-              {/* Provably-fair note for random draws */}
-              {giveaway.type === "RANDOM" && (
-                <div className="mt-6 flex items-start gap-2 rounded-xl border border-border bg-ink-black/30 px-4 py-3 text-xs text-muted-foreground">
-                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-scarlet-soft" />
-                  Winners are drawn with a seeded CSPRNG. The seed is recorded so the
-                  draw is reproducible and auditable.
-                </div>
-              )}
             </div>
 
             {/* --- Entry sidebar --- */}
