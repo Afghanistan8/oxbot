@@ -241,6 +241,9 @@ export default async function PublicGiveawayPage({
               {/* Project links */}
               <ProjectLinks giveaway={giveaway} />
 
+              {/* Team members */}
+              <TeamMembers members={giveaway.teamMembers} />
+
             </div>
 
             {/* --- Entry sidebar --- */}
@@ -319,6 +322,59 @@ function ProjectLinks({
         />
       )}
       {team.website && <LinkChip href={team.website} icon={Globe} label="Website" />}
+    </div>
+  );
+}
+
+const TEAM_ROLE_LABEL: Record<string, string> = {
+  OWNER: "Founder",
+  ADMIN: "Admin",
+  EDITOR: "Team",
+};
+
+function TeamMembers({
+  members,
+}: {
+  members: NonNullable<Awaited<ReturnType<typeof getPublicGiveaway>>>["teamMembers"];
+}) {
+  if (!members || members.length === 0) return null;
+
+  return (
+    <div className="mt-10">
+      <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-gold/80">
+        Team members
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {members.map((m, i) => (
+          <div
+            key={`${m.handle ?? m.name ?? "member"}-${i}`}
+            className="rounded-2xl border border-border bg-card/40 p-6"
+          >
+            <Avatar className="h-20 w-20 rounded-2xl">
+              {m.image && <AvatarImage src={m.image} alt="" className="rounded-2xl object-cover" />}
+              <AvatarFallback className="rounded-2xl text-lg">
+                {teamInitials(m.name ?? m.handle ?? "?")}
+              </AvatarFallback>
+            </Avatar>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-gold/80">
+              {TEAM_ROLE_LABEL[m.role] ?? "Team"}
+            </p>
+            {m.name && (
+              <p className="mt-1 font-display text-xl font-bold text-white">{m.name}</p>
+            )}
+            {m.handle && (
+              <a
+                href={`https://x.com/${m.handle.replace(/^@/, "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-block text-sm text-muted-foreground transition-colors hover:text-scarlet-soft"
+              >
+                @{m.handle.replace(/^@/, "")}
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

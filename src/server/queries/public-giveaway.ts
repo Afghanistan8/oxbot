@@ -10,6 +10,7 @@ import type {
   GiveawayVisibility,
   RequirementStatus,
   RequirementType,
+  TeamRole,
 } from "@prisma/client";
 
 /**
@@ -39,6 +40,17 @@ export type ViewerEntry = {
   seq: number | null;
   isWinner: boolean;
   winnerRank: number | null;
+};
+
+/** A publicly-shown project team member (founder / admins) for the giveaway page. */
+export type PublicTeamMember = {
+  role: TeamRole;
+  /** Display name — the linked X display name, falling back to the account name. */
+  name: string | null;
+  /** X handle (without @), when the member has X connected. */
+  handle: string | null;
+  /** Avatar — the member's profile picture, falling back to their X avatar. */
+  image: string | null;
 };
 
 export type PublicGiveawayDetail = {
@@ -71,6 +83,8 @@ export type PublicGiveawayDetail = {
     website: string | null;
   };
   requirements: PublicRequirement[];
+  /** The project's public-facing team (founder + admins). */
+  teamMembers: PublicTeamMember[];
   /** Present only when the viewer is signed in AND has an entry. */
   viewerEntry: ViewerEntry | null;
 };
@@ -98,6 +112,24 @@ export async function getPublicGiveaway(
           xHandle: true,
           discordInvite: true,
           website: true,
+          members: {
+            // Only the public-facing team (founder + admins), not raffle managers.
+            where: { role: { in: ["OWNER", "ADMIN"] } },
+            select: {
+              role: true,
+              user: {
+                select: {
+                  name: true,
+                  image: true,
+                  connections: {
+                    where: { provider: "twitter" },
+                    select: { username: true, displayName: true, avatarUrl: true },
+                    take: 1,
+                  },
+                },
+              },
+            },
+          },
         },
       },
       requirements: { orderBy: { order: "asc" } },
@@ -142,6 +174,22 @@ export async function getPublicGiveaway(
     viewerStatus: statusByReq.get(r.id) ?? null,
   }));
 
+  // Founder first, then admins. Identity prefers the member's linked X (display
+  // name + handle + avatar) so the card matches how they present on X.
+  const ROLE_RANK: Record<TeamRole, number> = { OWNER: 0, ADMIN: 1, EDITOR: 2 };
+  const teamMembers: PublicTeamMember[] = g.team.members
+    .slice()
+    .sort((a, b) => ROLE_RANK[a.role] - ROLE_RANK[b.role])
+    .map((m) => {
+      const tw = m.user.connections[0] ?? null;
+      return {
+        role: m.role,
+        name: tw?.displayName ?? m.user.name ?? null,
+        handle: tw?.username ?? null,
+        image: m.user.image ?? tw?.avatarUrl ?? null,
+      };
+    });
+
   return {
     id: g.id,
     slug: g.slug,
@@ -164,6 +212,7 @@ export async function getPublicGiveaway(
     drawnAt: g.drawnAt,
     team: g.team,
     requirements,
+    teamMembers,
     viewerEntry,
   };
 }
