@@ -61,13 +61,16 @@ const config: Config = {
           deep: "#D9A441",
         },
         ink: {
-          black: "#0A0A0A", // very dark near-black background
-          charcoal: "#141414", // charcoal background
+          // Warm red-brown base (olive-khaki × crimson), matched to the
+          // --background/--card tokens so translucent `bg-ink-black/40` insets
+          // read as a subtle darkening of the warm surface, never cold black.
+          black: "#241614", // deepest warm base (≈ --background)
+          charcoal: "#2E1C1A", // warm charcoal (≈ --card)
         },
         surface: {
-          DEFAULT: "#1A0F10", // elevated dark red-tinted surface
-          raised: "#1F1214", // slightly more elevated surface
-          border: "#3F1A1D", // soft red border
+          DEFAULT: "#2E1C1A", // elevated warm red-brown surface
+          raised: "#37231F", // slightly more elevated surface
+          border: "#5C302C", // warm crimson-brown border
         },
 
         // ---- shadcn/ui semantic tokens (HSL vars from globals.css) ----

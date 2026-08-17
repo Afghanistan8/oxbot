@@ -109,7 +109,7 @@ export async function sendMagicLinkEmail(to: string, url: string): Promise<void>
 
 function magicLinkTemplate(url: string): string {
   return `
-  <div style="background:#0A0A0A;padding:40px 0;font-family:Inter,Arial,sans-serif;">
+  <div style="background:#241614;padding:40px 0;font-family:Inter,Arial,sans-serif;">
     <div style="max-width:480px;margin:0 auto;background:#1A0F10;border:1px solid #3F1A1D;border-radius:20px;padding:36px;color:#fff;">
       <h1 style="margin:0 0 8px;font-size:22px;background:linear-gradient(135deg,#fff,#EF4444);-webkit-background-clip:text;background-clip:text;color:transparent;">${brand.name}</h1>
       <p style="color:#b9a9ab;font-size:14px;line-height:1.6;margin:0 0 24px;">

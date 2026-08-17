@@ -14,40 +14,40 @@
   :root {
     /* We ship dark-only, but define tokens on :root so SSR has them immediately. */
 
-    /* Backgrounds — near-black + charcoal */
-    --background: 0 0% 4%;              /* #0A0A0A */
-    --foreground: 0 0% 98%;            /* soft white */
+    /* Backgrounds — warm grainy red-brown (olive-khaki × crimson), not black */
+    --background: 8 30% 11%;           /* ~#241614 warm dark red-brown */
+    --foreground: 30 25% 96%;          /* warm near-white */
 
-    /* Cards & popovers — dark red-tinted surfaces */
-    --card: 353 26% 8%;               /* ~#1A0F10 */
-    --card-foreground: 0 0% 98%;
-    --popover: 351 26% 9%;            /* ~#1F1214 */
-    --popover-foreground: 0 0% 98%;
+    /* Cards & popovers — elevated warm red-brown surfaces */
+    --card: 8 28% 14%;                 /* ~#2E1C1A */
+    --card-foreground: 30 25% 96%;
+    --popover: 8 30% 13%;              /* ~#2C1917 */
+    --popover-foreground: 30 25% 96%;
 
-    /* Primary — deep crimson */
+    /* Primary — deep crimson (the red soul, unchanged) */
     --primary: 350 73% 44%;           /* #C41E3A */
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary — muted red-charcoal */
-    --secondary: 351 20% 14%;
-    --secondary-foreground: 0 0% 96%;
+    /* Secondary — muted warm red-brown */
+    --secondary: 8 24% 20%;
+    --secondary-foreground: 30 20% 95%;
 
     /* Muted — for body text + subtle surfaces */
-    --muted: 350 12% 15%;
-    --muted-foreground: 350 8% 64%;
+    --muted: 8 18% 22%;
+    --muted-foreground: 24 15% 68%;   /* warm gray body text */
 
-    /* Accent — scarlet-tinted hover surfaces */
-    --accent: 0 74% 20%;
+    /* Accent — warm crimson hover surfaces */
+    --accent: 6 40% 26%;
     --accent-foreground: 0 0% 100%;
 
     /* Destructive — brighter scarlet */
     --destructive: 0 84% 60%;         /* #EF4444 */
     --destructive-foreground: 0 0% 100%;
 
-    /* Borders, inputs, focus rings — soft red */
-    --border: 353 41% 18%;            /* ~#3F1A1D */
-    --input: 353 30% 16%;
-    --ring: 350 73% 50%;
+    /* Borders, inputs, focus rings — warm crimson-brown */
+    --border: 8 32% 24%;
+    --input: 8 26% 20%;
+    --ring: 350 73% 52%;
 
     /* Winner / premium accent — warm gold */
     --gold: 43 88% 64%;               /* #F5C451 */
@@ -65,25 +65,25 @@
 
   /* Dark mode only — mirror the root tokens so `.dark` selectors resolve. */
   .dark {
-    --background: 0 0% 4%;
-    --foreground: 0 0% 98%;
-    --card: 353 26% 8%;
-    --card-foreground: 0 0% 98%;
-    --popover: 351 26% 9%;
-    --popover-foreground: 0 0% 98%;
+    --background: 8 30% 11%;
+    --foreground: 30 25% 96%;
+    --card: 8 28% 14%;
+    --card-foreground: 30 25% 96%;
+    --popover: 8 30% 13%;
+    --popover-foreground: 30 25% 96%;
     --primary: 350 73% 44%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 351 20% 14%;
-    --secondary-foreground: 0 0% 96%;
-    --muted: 350 12% 15%;
-    --muted-foreground: 350 8% 64%;
-    --accent: 0 74% 20%;
+    --secondary: 8 24% 20%;
+    --secondary-foreground: 30 20% 95%;
+    --muted: 8 18% 22%;
+    --muted-foreground: 24 15% 68%;
+    --accent: 6 40% 26%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 353 41% 18%;
-    --input: 353 30% 16%;
-    --ring: 350 73% 50%;
+    --border: 8 32% 24%;
+    --input: 8 26% 20%;
+    --ring: 350 73% 52%;
     --gold: 43 88% 64%;
     --gold-foreground: 40 30% 8%;
   }
@@ -110,19 +110,20 @@
     position: relative;
   }
 
-  /* Fine film-grain texture over every page — the near-black surface reads as
-     flat/plasticky without it; a whisper of noise is what makes a dark UI feel
-     premium instead of just dark. Fixed + pointer-events:none so it never
-     intercepts clicks; mix-blend so it tints rather than covers. */
+  /* Heavy film-grain texture over every page — the defining feature of the
+     warm, tactile surface. Fixed + pointer-events:none so it never intercepts
+     clicks; soft-light blend so it tints/textures the warm base rather than
+     graying it out. Tuned to be clearly visible (like the reference) while
+     staying comfortable behind body text. */
   body::before {
     content: "";
     position: fixed;
     inset: 0;
     z-index: 1;
     pointer-events: none;
-    opacity: 0.035;
-    mix-blend-mode: overlay;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.14;
+    mix-blend-mode: soft-light;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
   ::selection {
@@ -163,12 +164,13 @@
     @apply bg-gold-gradient bg-clip-text text-transparent;
   }
 
-  /* Glass surface with a soft red glow — used for premium cards. */
+  /* Glass surface with a soft red glow — used for premium cards. Warm
+     red-brown translucent tint to match the new grainy base. */
   .glass-red {
     background: linear-gradient(
       180deg,
-      rgba(31, 18, 20, 0.75) 0%,
-      rgba(20, 12, 13, 0.6) 100%
+      rgba(46, 28, 26, 0.75) 0%,
+      rgba(36, 22, 20, 0.6) 100%
     );
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
