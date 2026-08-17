@@ -74,6 +74,27 @@ export async function saveWalletsAction(
   });
 }
 
+// --- Social connections ------------------------------------------------------
+
+/**
+ * Disconnects a linked X/Discord identity used for entry-task verification.
+ * This only removes the SocialConnection record (profile-side data) — it
+ * never touches the NextAuth Account used for signing in, so unlinking X
+ * can't lock anyone out of their account.
+ */
+export async function disconnectSocialAction(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const provider = String(formData.get("provider") ?? "");
+  if (provider !== "twitter" && provider !== "discord") return;
+
+  const rl = rateLimit(`social-disconnect:${userId}`, RATE_LIMITS.mutate.limit, RATE_LIMITS.mutate.windowMs);
+  if (!rl.success) return;
+
+  await db.socialConnection.deleteMany({ where: { userId, provider } });
+
+  revalidatePath("/profile");
+}
+
 // --- Profile picture --------------------------------------------------------
 
 /**

@@ -11,6 +11,7 @@ import { getUserWallets, getUserWins } from "@/server/queries/profile";
 import { integrations } from "@/lib/env";
 import { formatDate } from "@/lib/format";
 import { oauthSignInAction } from "@/server/actions/auth";
+import { disconnectSocialAction } from "@/server/actions/profile";
 import { brand } from "@/lib/brand";
 
 import { SiteHeader } from "@/components/brand/site-header";
@@ -111,6 +112,7 @@ export default async function ProfilePage() {
                 oauthLive={integrations.twitter.oauthLive}
                 provider="twitter"
                 label="Connect X"
+                disconnectable
               />
             </CardContent>
           </Card>
@@ -189,33 +191,45 @@ function ConnectionRow({
   oauthLive,
   provider,
   label,
+  disconnectable = false,
 }: {
   connected: SocialConnectionSummary | null;
   oauthLive: boolean;
   provider: "twitter" | "discord";
   label: string;
+  disconnectable?: boolean;
 }) {
   if (connected) {
     const name = connectionLabel(connected);
     return (
-      <div className="flex items-center gap-2.5">
-        {connected.avatarUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={connected.avatarUrl}
-            alt=""
-            className="h-8 w-8 rounded-full border border-border object-cover"
-          />
-        )}
-        <div className="min-w-0">
-          {name && (
-            <p className="truncate text-sm font-medium text-white">{name}</p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          {connected.avatarUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={connected.avatarUrl}
+              alt=""
+              className="h-8 w-8 rounded-full border border-border object-cover"
+            />
           )}
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-300">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Connected
-          </span>
+          <div className="min-w-0">
+            {name && (
+              <p className="truncate text-sm font-medium text-white">{name}</p>
+            )}
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-300">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Connected
+            </span>
+          </div>
         </div>
+        {disconnectable && (
+          <form action={disconnectSocialAction}>
+            <input type="hidden" name="provider" value={provider} />
+            <Button type="submit" variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+              Disconnect
+            </Button>
+          </form>
+        )}
       </div>
     );
   }
