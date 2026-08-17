@@ -22,17 +22,18 @@ export async function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-ink-black/70 backdrop-blur-xl">
-      <div className="container flex h-16 items-center justify-between gap-4">
-        <div className="flex items-center gap-8">
+      <div className="container grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-4">
+        <div className="flex items-center">
           <Logo />
-          <nav className="hidden items-center gap-1 md:flex">
-            <NavLink href="/">Explore</NavLink>
-            <NavLink href="/guide">How it works</NavLink>
-            <NavLink href="/dashboard">For projects</NavLink>
-          </nav>
         </div>
 
-        <div className="flex items-center gap-2">
+        <nav className="hidden items-center gap-1 md:flex">
+          <NavLink href="/">Explore</NavLink>
+          <NavLink href="/guide">How it works</NavLink>
+          <NavLink href="/dashboard">For projects</NavLink>
+        </nav>
+
+        <div className="flex items-center justify-end gap-2">
           {user ? (
             <>
               <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">

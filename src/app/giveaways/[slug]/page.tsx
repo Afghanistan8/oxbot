@@ -113,23 +113,23 @@ export default async function PublicGiveawayPage({
       <SiteHeader />
 
       <main className="pb-20">
-        {/* Banner */}
-        <div className="relative h-56 w-full overflow-hidden bg-ink-charcoal sm:h-72">
+        {/* Banner — full-bleed background behind the hero, not a cropped strip */}
+        <div className="relative h-72 w-full overflow-hidden bg-ink-charcoal sm:h-[26rem]">
           {giveaway.bannerUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={giveaway.bannerUrl}
               alt=""
-              className="h-full w-full object-cover"
+              className="h-full w-full scale-105 object-cover blur-[2px]"
             />
           ) : (
             <div className="h-full w-full bg-crimson-gradient/20" />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-background/20" />
           <div className="pointer-events-none absolute inset-0 bg-hero-radial opacity-60" />
         </div>
 
-        <div className="container -mt-24 relative">
+        <div className="container -mt-40 relative">
           <div className="grid gap-8 lg:grid-cols-[1fr_400px]">
             {/* --- Main column --- */}
             <div className="min-w-0">

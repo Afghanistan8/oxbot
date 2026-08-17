@@ -124,60 +124,82 @@ function Hero({
       <div className="pointer-events-none absolute inset-0 bg-grid-red mask-fade-bottom opacity-70" />
       <div className="pointer-events-none absolute inset-0 bg-hero-radial" />
 
-      <div className="container relative flex flex-col items-center py-24 text-center sm:py-32">
-        <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-medium text-scarlet-soft shadow-glow-red">
-          <Sparkles className="h-3.5 w-3.5" />
-          {liveCount > 0
-            ? `${liveCount} giveaway${liveCount === 1 ? "" : "s"} live right now`
-            : "Provably-fair Web3 giveaways"}
-        </div>
-
-        <h1 className="mt-6 max-w-4xl font-display text-4xl font-black leading-[1.05] tracking-tight text-white sm:text-6xl md:text-7xl">
-          Run giveaways with a{" "}
-          <span className="text-gradient-crimson">fierce, elegant</span> edge
-        </h1>
-
-        <p className="mt-6 max-w-2xl text-lg text-muted-foreground">
-          {brand.description}
-        </p>
-
-        <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row">
-          <Button asChild size="lg">
-            <Link href="/signin?callbackUrl=/dashboard">
-              Launch a giveaway
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link href="#explore">Explore live drops</Link>
-          </Button>
-        </div>
-
-        {/* Trust points */}
-        <div className="mt-14 grid w-full max-w-3xl grid-cols-1 gap-4 sm:grid-cols-3">
-          <TrustPoint
-            icon={Lock}
-            title="Private entries"
-            body="Only you see who entered."
-          />
-          <TrustPoint
-            icon={ShieldCheck}
-            title="Provably fair"
-            body="Seeded CSPRNG draws."
-          />
-          <TrustPoint
-            icon={Gift}
-            title="Three modes"
-            body="Raffle · FCFS · Codes."
-          />
-        </div>
-
-        {totalShown > 0 && (
-          <p className="mt-10 text-xs uppercase tracking-widest text-muted-foreground/70">
-            Scroll to explore {totalShown} open giveaway
-            {totalShown === 1 ? "" : "s"}
+      <div className="container relative grid gap-16 py-24 sm:py-28 lg:grid-cols-2 lg:items-center lg:py-36">
+        {/* --- Left: copy --- */}
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-scarlet-soft">
+            Raffles <span className="text-muted-foreground/50">·</span> Giveaways{" "}
+            <span className="text-muted-foreground/50">·</span> Web3
           </p>
-        )}
+
+          <h1 className="mt-5 font-display text-5xl font-black leading-[1.03] tracking-tight text-white sm:text-6xl md:text-7xl">
+            Run giveaways with a{" "}
+            <span className="text-gradient-crimson">fierce, elegant</span> edge
+          </h1>
+
+          <p className="mt-6 max-w-lg text-lg text-muted-foreground">
+            {brand.description}
+          </p>
+
+          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+            <Button asChild size="lg">
+              <Link href="/signin?callbackUrl=/dashboard">
+                Launch a giveaway
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href="#explore">Explore live drops</Link>
+            </Button>
+          </div>
+
+          {/* Trust points */}
+          <div className="mt-14 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-3">
+            <TrustPoint icon={Lock} title="Private entries" body="Only you see who entered." />
+            <TrustPoint icon={ShieldCheck} title="Provably fair" body="Seeded CSPRNG draws." />
+            <TrustPoint icon={Gift} title="Three modes" body="Raffle · FCFS · Codes." />
+          </div>
+
+          {totalShown > 0 && (
+            <p className="mt-10 text-xs uppercase tracking-widest text-muted-foreground/70">
+              Scroll to explore {totalShown} open giveaway
+              {totalShown === 1 ? "" : "s"}
+            </p>
+          )}
+        </div>
+
+        {/* --- Right: abstract crimson visual (no illustration/mascot) --- */}
+        <div className="relative hidden aspect-square items-center justify-center lg:flex">
+          <div className="pointer-events-none absolute h-[26rem] w-[26rem] rounded-full bg-primary/20 blur-[100px]" />
+          <div className="pointer-events-none absolute right-8 top-6 h-56 w-56 rounded-full bg-scarlet/25 blur-[80px]" />
+
+          <div className="relative h-80 w-80">
+            <div className="absolute inset-0 rounded-[2.5rem] border border-primary/25 shadow-glow-red" />
+            <div className="absolute inset-6 rounded-[2rem] border border-primary/15" />
+            <div className="glass-red absolute inset-12 rounded-3xl shadow-card" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="grid h-24 w-24 place-items-center rounded-3xl bg-crimson-gradient shadow-glow-red-lg">
+                <Sparkles className="h-10 w-10 text-white" />
+              </div>
+            </div>
+          </div>
+
+          {/* Floating live-status card */}
+          <div className="glass-red absolute -bottom-4 right-0 w-64 rounded-2xl p-4 shadow-card">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+              </span>
+              Live signal
+            </p>
+            <p className="mt-2 text-sm text-foreground/90">
+              {liveCount > 0
+                ? `${liveCount} giveaway${liveCount === 1 ? "" : "s"} live right now`
+                : "Provably-fair Web3 giveaways, launching soon."}
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   );

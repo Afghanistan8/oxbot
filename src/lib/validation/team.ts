@@ -63,6 +63,18 @@ export const updateTeamSchema = z.object({
     .regex(/^[0-9]*$/, "A Discord server ID is numeric.")
     .optional()
     .or(z.literal("")),
+  // Restricted to Discord's own domain — this URL is fetched server-side on
+  // every publish, so accepting an arbitrary URL here would be an SSRF vector.
+  discordWebhookUrl: z
+    .string()
+    .trim()
+    .max(300)
+    .regex(
+      /^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/.+$/,
+      "Enter a valid Discord webhook URL."
+    )
+    .optional()
+    .or(z.literal("")),
   telegram: optionalText(80),
   logoUrl: optionalUrl,
   bannerUrl: optionalUrl,

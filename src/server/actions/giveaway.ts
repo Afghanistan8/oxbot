@@ -10,6 +10,9 @@ import { recordAudit } from "@/lib/audit";
 import { uniqueGiveawaySlug } from "@/lib/slug";
 import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { generateUniqueCodes } from "@/lib/giveaway/codes";
+import { postGiveawayAnnouncement } from "@/lib/integrations/discord-webhook";
+import { absoluteUrl } from "@/lib/utils";
+import { CHAIN_META, GIVEAWAY_TYPE_META } from "@/lib/constants";
 import {
   giveawayFormSchema,
   type GiveawayFormInput,
@@ -118,7 +121,7 @@ export async function createGiveawayAction(
 
       const team = await db.team.findUniqueOrThrow({
         where: { id: teamId },
-        select: { slug: true },
+        select: { slug: true, name: true, discordWebhookUrl: true },
       });
       const slug = await uniqueGiveawaySlug(data.title);
       const status: GiveawayStatus = publish
@@ -170,6 +173,10 @@ export async function createGiveawayAction(
         target: created.id,
         meta: { title: data.title, type: data.type, status, published: publish },
       });
+
+      if (publish) {
+        await announceGiveaway(team, created);
+      }
 
       return ok({ slug: created.slug, teamSlug: team.slug, id: created.id });
     }
@@ -268,7 +275,7 @@ export async function publishGiveawayAction(giveawayId: string): Promise<ActionS
   return runAction(async () => {
     const giveaway = await db.giveaway.findUnique({
       where: { id: giveawayId },
-      include: { team: { select: { slug: true } } },
+      include: { team: { select: { slug: true, name: true, discordWebhookUrl: true } } },
     });
     if (!giveaway) return fail("Giveaway not found.");
     await requireTeamRole(userId, giveaway.teamId, "EDITOR");
@@ -290,6 +297,8 @@ export async function publishGiveawayAction(giveawayId: string): Promise<ActionS
       target: giveawayId,
       meta: { status },
     });
+
+    await announceGiveaway(giveaway.team, { ...giveaway, status });
 
     revalidatePath(`/dashboard/${giveaway.team.slug}/giveaways/${giveawayId}`);
     revalidatePath("/");
@@ -457,4 +466,48 @@ function buildCodeRows(data: GiveawayFormInput) {
     code,
     maxUses: data.codeMaxUses,
   }));
+}
+
+type AnnouncableGiveaway = {
+  slug: string;
+  title: string;
+  prize: string;
+  description: string | null;
+  bannerUrl: string | null;
+  chain: import("@prisma/client").Blockchain;
+  type: import("@prisma/client").GiveawayType;
+  visibility: import("@prisma/client").GiveawayVisibility;
+  status: GiveawayStatus;
+  startAt: Date;
+  endAt: Date;
+};
+
+/**
+ * Best-effort Discord announcement for a just-published giveaway. Never
+ * throws — a missing/broken webhook must not block publishing. Skips PRIVATE
+ * giveaways outright: announcing a code-gated, invite-only drop to a public
+ * channel would defeat the point of it being private.
+ */
+async function announceGiveaway(
+  team: { slug: string; name: string; discordWebhookUrl: string | null },
+  giveaway: AnnouncableGiveaway
+): Promise<void> {
+  if (!team.discordWebhookUrl || giveaway.visibility === "PRIVATE") return;
+
+  const result = await postGiveawayAnnouncement(team.discordWebhookUrl, team.name, {
+    title: giveaway.title,
+    prize: giveaway.prize,
+    description: giveaway.description,
+    url: absoluteUrl(`/giveaways/${giveaway.slug}`),
+    bannerUrl: giveaway.bannerUrl,
+    chainLabel: CHAIN_META[giveaway.chain].label,
+    typeLabel: GIVEAWAY_TYPE_META[giveaway.type].label,
+    startAt: giveaway.startAt,
+    endAt: giveaway.endAt,
+    isLive: giveaway.status === "ACTIVE",
+  });
+
+  if (!result.ok) {
+    console.warn(`[discord-webhook] announcement failed for team ${team.slug}:`, result.error);
+  }
 }

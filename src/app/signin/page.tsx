@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { CircleAlert } from "lucide-react";
 
 import { brand } from "@/lib/brand";
 import { integrations } from "@/lib/env";
@@ -11,10 +12,38 @@ import { Card } from "@/components/ui/card";
 
 export const metadata = { title: "Sign in" };
 
-export default async function SignInPage() {
+/**
+ * Auth.js redirects here with ?error=<code> on any sign-in failure (this page
+ * is configured as `pages.error`). Without this mapping the page just showed
+ * the normal form with no explanation — a real gap: a failed sign-in looked
+ * identical to a fresh visit, giving the user nothing to act on.
+ */
+const ERROR_MESSAGES: Record<string, string> = {
+  OAuthAccountNotLinked:
+    "This email is already linked to a different sign-in method. Try the method you originally used — or sign in with email to link this account.",
+  OAuthSignin: "Couldn't start the sign-in request. Please try again.",
+  OAuthCallback: "Discord/X didn't confirm the sign-in. Please try again.",
+  OAuthCreateAccount: "Couldn't create an account from that sign-in. Please try again.",
+  EmailCreateAccount: "Couldn't create an account with that email. Please try again.",
+  EmailSignin: "Couldn't send the sign-in link. Please try again in a moment.",
+  Callback: "Something went wrong completing sign-in. Please try again.",
+  AccessDenied: "Access denied. You may have cancelled the sign-in request.",
+  Verification: "That sign-in link has expired or was already used. Request a new one.",
+  Configuration: "Sign-in isn't configured correctly. Please try again shortly.",
+  Default: "Something went wrong signing you in. Please try again.",
+};
+
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; callbackUrl?: string }>;
+}) {
   // Already signed in? Go to the dashboard.
   const userId = await getCurrentUserId();
   if (userId) redirect("/dashboard");
+
+  const { error } = await searchParams;
+  const errorMessage = error ? (ERROR_MESSAGES[error] ?? ERROR_MESSAGES.Default) : null;
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-16">
@@ -36,6 +65,16 @@ export default async function SignInPage() {
             </p>
           </div>
         </div>
+
+        {errorMessage && (
+          <div
+            role="alert"
+            className="mb-5 flex items-start gap-2.5 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          >
+            <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            {errorMessage}
+          </div>
+        )}
 
         <Card glow className="p-6 sm:p-8">
           <Suspense

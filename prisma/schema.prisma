@@ -212,6 +212,7 @@ model Team {
   xHandle      String? // official X (Twitter) handle, without @
   discordInvite String?
   discordGuildId String? // guild id once the oxbot Discord bot has been invited
+  discordWebhookUrl String? // incoming webhook — auto-announces published giveaways
   telegram     String?
   chains       Blockchain[]
 

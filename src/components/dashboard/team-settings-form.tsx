@@ -264,6 +264,24 @@ export function TeamSettingsForm({
                   </p>
                 )}
               </div>
+
+              <div className="mt-3">
+                <Label htmlFor="discordWebhookUrl">Announcement webhook (optional)</Label>
+                <Input
+                  id="discordWebhookUrl"
+                  name="discordWebhookUrl"
+                  type="url"
+                  defaultValue={team.discordWebhookUrl ?? ""}
+                  placeholder="https://discord.com/api/webhooks/…"
+                />
+                <FieldError errors={state.fieldErrors?.discordWebhookUrl} />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  When set, every giveaway you publish is announced to this
+                  channel automatically. In Discord: Server Settings →
+                  Integrations → Webhooks → New Webhook → Copy Webhook URL.
+                  No bot invite needed for this one.
+                </p>
+              </div>
             </div>
 
             {/* Telegram */}

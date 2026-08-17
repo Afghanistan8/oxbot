@@ -23,10 +23,11 @@ import {
 } from "@/server/queries/dashboard";
 import { roleAtLeast, GIVEAWAY_TYPE_META, GIVEAWAY_VISIBILITY_META, REQUIREMENT_META } from "@/lib/constants";
 import { giveawayPhase, PHASE_META, formatDateTime } from "@/lib/format";
-import { formatNumber, cn } from "@/lib/utils";
+import { formatNumber, cn, absoluteUrl } from "@/lib/utils";
 import { brand } from "@/lib/brand";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { GiveawayActions } from "@/components/dashboard/giveaway-actions";
+import { CopyLinkButton } from "@/components/dashboard/copy-link-button";
 import { ChainBadge } from "@/components/giveaway/chain-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -96,13 +97,16 @@ export default async function ManageGiveawayPage({
           {GIVEAWAY_VISIBILITY_META[giveaway.visibility].label}
         </span>
         {isPublicable && (
-          <Link
-            href={`/giveaways/${giveaway.slug}`}
-            target="_blank"
-            className="inline-flex items-center gap-1 text-xs text-scarlet-soft hover:text-white"
-          >
-            View public page <ExternalLink className="h-3 w-3" />
-          </Link>
+          <>
+            <Link
+              href={`/giveaways/${giveaway.slug}`}
+              target="_blank"
+              className="inline-flex items-center gap-1 text-xs text-scarlet-soft hover:text-white"
+            >
+              View public page <ExternalLink className="h-3 w-3" />
+            </Link>
+            <CopyLinkButton url={absoluteUrl(`/giveaways/${giveaway.slug}`)} />
+          </>
         )}
       </div>
 
