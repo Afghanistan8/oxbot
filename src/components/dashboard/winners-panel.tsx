@@ -8,7 +8,8 @@ import { Trophy, Crown, Dices, RefreshCw, Loader2, ShieldCheck, Download } from 
 import type { GiveawayType, WinnerMethod } from "@prisma/client";
 
 import { drawWinnersAction, rerollWinnersAction } from "@/server/actions/winners";
-import { type GiveawayPhase, formatDateTime } from "@/lib/format";
+import { type GiveawayPhase } from "@/lib/format";
+import { LocalTime } from "@/components/local-time";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -173,7 +174,7 @@ export function WinnersPanel({
                 <ShieldCheck className="h-3.5 w-3.5 text-scarlet-soft" />
                 {METHOD_LABEL[winners[0]!.method]}
               </span>
-              {drawnAt && <span>Drawn {formatDateTime(drawnAt)}</span>}
+              {drawnAt && <span>Drawn <LocalTime value={drawnAt} /></span>}
               {drawSeed && (
                 <span className="font-mono" title={drawSeed}>
                   seed {drawSeed.slice(0, 12)}…

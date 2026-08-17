@@ -4,19 +4,30 @@ import type { Giveaway, GiveawayStatus } from "@prisma/client";
  * Date / time formatting + giveaway timing helpers.
  */
 
-/** Format a date for display (e.g. "Aug 12, 2026, 3:40 PM"). */
-export function formatDateTime(date: Date | string): string {
+/**
+ * Format a date for display (e.g. "Aug 12, 2026, 3:40 PM").
+ *
+ * With no `timeZone` the runtime's zone is used — which is the viewer's local
+ * zone on the client, but UTC on the server. Pass an explicit `timeZone`
+ * (e.g. "UTC") when a deterministic, environment-independent result is needed,
+ * such as the SSR/hydration pass behind <LocalTime>.
+ */
+export function formatDateTime(date: Date | string, timeZone?: string): string {
   const d = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short",
+    ...(timeZone ? { timeZone } : {}),
   }).format(d);
 }
 
-/** Format just the date (e.g. "Aug 12, 2026"). */
-export function formatDate(date: Date | string): string {
+/** Format just the date (e.g. "Aug 12, 2026"). See {@link formatDateTime} re: `timeZone`. */
+export function formatDate(date: Date | string, timeZone?: string): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(d);
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    ...(timeZone ? { timeZone } : {}),
+  }).format(d);
 }
 
 export type TimeParts = {

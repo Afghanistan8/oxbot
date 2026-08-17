@@ -22,7 +22,8 @@ import {
   type ManagedRequirement,
 } from "@/server/queries/dashboard";
 import { roleAtLeast, GIVEAWAY_TYPE_META, GIVEAWAY_VISIBILITY_META, REQUIREMENT_META } from "@/lib/constants";
-import { giveawayPhase, PHASE_META, formatDateTime } from "@/lib/format";
+import { giveawayPhase, PHASE_META } from "@/lib/format";
+import { LocalTime } from "@/components/local-time";
 import { formatNumber, cn, absoluteUrl } from "@/lib/utils";
 import { brand } from "@/lib/brand";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -172,9 +173,9 @@ export default async function ManageGiveawayPage({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <Row label="Starts" value={formatDateTime(giveaway.startAt)} />
-            <Row label="Ends" value={formatDateTime(giveaway.endAt)} />
-            {giveaway.drawnAt && <Row label="Drawn" value={formatDateTime(giveaway.drawnAt)} />}
+            <Row label="Starts" value={<LocalTime value={giveaway.startAt} />} />
+            <Row label="Ends" value={<LocalTime value={giveaway.endAt} />} />
+            {giveaway.drawnAt && <Row label="Drawn" value={<LocalTime value={giveaway.drawnAt} />} />}
           </CardContent>
         </Card>
 
@@ -332,7 +333,7 @@ function StatCard({
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <span className="text-muted-foreground">{label}</span>

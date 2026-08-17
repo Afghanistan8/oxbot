@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import {
   Trophy,
   Users,
@@ -13,7 +14,7 @@ import {
 import { getCurrentUserId } from "@/lib/session";
 import { getPublicGiveaway, getPublicWinners } from "@/server/queries/public-giveaway";
 import { getConnectedAccounts } from "@/lib/giveaway/entry-validation";
-import { giveawayPhase, PHASE_META, formatDateTime } from "@/lib/format";
+import { giveawayPhase, PHASE_META } from "@/lib/format";
 import { GIVEAWAY_TYPE_META, GIVEAWAY_VISIBILITY_META } from "@/lib/constants";
 import { formatNumber, absoluteUrl } from "@/lib/utils";
 import { brand } from "@/lib/brand";
@@ -27,6 +28,7 @@ import { ChainBadge } from "@/components/giveaway/chain-badge";
 import { Countdown } from "@/components/giveaway/countdown";
 import { EntryWizard } from "@/components/entry/entry-wizard";
 import { WinnersList } from "@/components/entry/winners-list";
+import { LocalTime } from "@/components/local-time";
 
 // Viewer-specific (entry progress, connected accounts) — always render live.
 export const dynamic = "force-dynamic";
@@ -197,7 +199,7 @@ export default async function PublicGiveawayPage({
                 <MetaStat
                   icon={CalendarClock}
                   label={phase === "upcoming" ? "Starts" : "Ends"}
-                  value={formatDateTime(phase === "upcoming" ? giveaway.startAt : giveaway.endAt)}
+                  value={<LocalTime value={phase === "upcoming" ? giveaway.startAt : giveaway.endAt} />}
                 />
               </div>
 
@@ -270,7 +272,7 @@ function MetaStat({
 }: {
   icon: typeof Users;
   label: string;
-  value: string;
+  value: ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-border bg-card/40 px-4 py-3">

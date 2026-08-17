@@ -9,7 +9,7 @@ import {
 } from "@/server/queries/teams";
 import { getUserWallets, getUserWins } from "@/server/queries/profile";
 import { integrations } from "@/lib/env";
-import { formatDate } from "@/lib/format";
+import { LocalTime } from "@/components/local-time";
 import { oauthSignInAction } from "@/server/actions/auth";
 import { disconnectSocialAction } from "@/server/actions/profile";
 import { brand } from "@/lib/brand";
@@ -170,7 +170,7 @@ export default async function ProfilePage() {
                           </p>
                         </div>
                         <span className="shrink-0 text-xs text-muted-foreground">
-                          {formatDate(w.selectedAt)}
+                          <LocalTime value={w.selectedAt} mode="date" />
                         </span>
                       </Link>
                     </li>
