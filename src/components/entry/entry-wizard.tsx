@@ -76,6 +76,8 @@ export type EntryWizardProps = {
   phase: GiveawayPhase;
   isSignedIn: boolean;
   hasAccountEmail: boolean;
+  /** Whether the viewer has saved a wallet on their profile (for the prize nudge). */
+  hasProfileWallet: boolean;
   twitterConnected: boolean;
   discordConnected: boolean;
   twitterOauthLive: boolean;
@@ -99,6 +101,7 @@ export function EntryWizard(props: EntryWizardProps) {
     phase,
     isSignedIn,
     hasAccountEmail,
+    hasProfileWallet,
     twitterConnected,
     discordConnected,
     twitterOauthLive,
@@ -146,6 +149,11 @@ export function EntryWizard(props: EntryWizardProps) {
   const needsEmail = types.has("EMAIL") && !hasAccountEmail;
   const hasWallet = types.has("WALLET");
 
+  // Nudge signed-in entrants to save a wallet on their profile when this
+  // giveaway doesn't collect one at entry — so their prize wallet is on file
+  // for the winners export if they win.
+  const showWalletNudge = isSignedIn && !hasWallet && !hasProfileWallet;
+
   // Live-mode account-linking prompts (mock mode auto-verifies, so none needed).
   const needTwitterConnect =
     twitterOauthLive &&
@@ -166,6 +174,11 @@ export function EntryWizard(props: EntryWizardProps) {
         {phase === "upcoming" && requirements.length > 0 && (
           <div className="mt-5">
             <TaskPreview requirements={requirements} />
+          </div>
+        )}
+        {showWalletNudge && (phase === "upcoming" || viewerEntry) && (
+          <div className="mt-5">
+            <WalletNudge slug={slug} />
           </div>
         )}
       </Panel>
@@ -217,6 +230,8 @@ export function EntryWizard(props: EntryWizardProps) {
       {alreadyEntered && (
         <EnteredBanner type={type} viewerEntry={viewerEntry} completed={state.data?.completed} />
       )}
+
+      {showWalletNudge && <WalletNudge slug={slug} />}
 
       {/* Account linking prompts (own forms — never nested in the entry form) */}
       {(needTwitterConnect || needDiscordConnect) && (
@@ -324,6 +339,32 @@ function Panel({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-2xl border border-border bg-card bg-card-glow p-6 shadow-card">
       {children}
+    </div>
+  );
+}
+
+/**
+ * A gentle prompt for signed-in entrants to save a wallet on their profile, so
+ * their prize address is on file for the winners export if they win. Shown only
+ * when the giveaway doesn't already collect a wallet at entry.
+ */
+function WalletNudge({ slug }: { slug: string }) {
+  return (
+    <div className="mb-5 flex items-start gap-3 rounded-2xl border border-gold/30 bg-gold/[0.07] p-4">
+      <Wallet className="mt-0.5 h-5 w-5 shrink-0 text-gold" />
+      <div className="min-w-0 text-sm">
+        <p className="font-medium text-gold">Add your wallet to your profile</p>
+        <p className="mt-0.5 text-muted-foreground">
+          If you win, this is where your prize goes. Add it once and it&apos;s on
+          file for every giveaway.
+        </p>
+        <Link
+          href="/profile"
+          className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-gold hover:text-white"
+        >
+          Add your wallet →
+        </Link>
+      </div>
     </div>
   );
 }

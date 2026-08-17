@@ -13,6 +13,7 @@ import {
 
 import { getCurrentUserId } from "@/lib/session";
 import { getPublicGiveaway, getPublicWinners } from "@/server/queries/public-giveaway";
+import { userHasProfileWallet } from "@/server/queries/profile";
 import { getConnectedAccounts } from "@/lib/giveaway/entry-validation";
 import { giveawayPhase, PHASE_META } from "@/lib/format";
 import { GIVEAWAY_TYPE_META, GIVEAWAY_VISIBILITY_META } from "@/lib/constants";
@@ -102,11 +103,16 @@ export default async function PublicGiveawayPage({
   let hasAccountEmail = false;
   let twitterConnected = false;
   let discordConnected = false;
+  let hasProfileWallet = false;
   if (viewerId) {
-    const accounts = await getConnectedAccounts(viewerId);
+    const [accounts, walletSaved] = await Promise.all([
+      getConnectedAccounts(viewerId),
+      userHasProfileWallet(viewerId),
+    ]);
     hasAccountEmail = Boolean(accounts.email);
     twitterConnected = Boolean(accounts.twitterUserId);
     discordConnected = Boolean(accounts.discordUserId);
+    hasProfileWallet = walletSaved;
   }
 
   return (
@@ -246,6 +252,7 @@ export default async function PublicGiveawayPage({
                 phase={phase}
                 isSignedIn={Boolean(viewerId)}
                 hasAccountEmail={hasAccountEmail}
+                hasProfileWallet={hasProfileWallet}
                 twitterConnected={twitterConnected}
                 discordConnected={discordConnected}
                 twitterOauthLive={integrations.twitter.oauthLive}

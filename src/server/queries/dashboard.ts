@@ -361,28 +361,50 @@ export type WinnerExportRow = {
  * "Download winners" CSV export.
  */
 export async function getWinnerExportRows(giveawayId: string): Promise<WinnerExportRow[]> {
-  const winners = await db.winner.findMany({
-    where: { giveawayId },
-    orderBy: { rank: "asc" },
-    include: {
-      user: { select: { id: true, name: true, email: true } },
-      entry: { select: { submittedAt: true, seq: true, metadata: true } },
-    },
-  });
+  const [giveaway, winners] = await Promise.all([
+    db.giveaway.findUnique({ where: { id: giveawayId }, select: { chain: true } }),
+    db.winner.findMany({
+      where: { giveawayId },
+      orderBy: { rank: "asc" },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        entry: { select: { submittedAt: true, seq: true, metadata: true } },
+      },
+    }),
+  ]);
 
   const userIds = winners.map((w) => w.userId);
-  const discordConnections = await db.socialConnection.findMany({
-    where: { userId: { in: userIds }, provider: "discord" },
-    select: { userId: true, username: true },
-  });
+  const [discordConnections, profileWallets] = await Promise.all([
+    db.socialConnection.findMany({
+      where: { userId: { in: userIds }, provider: "discord" },
+      select: { userId: true, username: true },
+    }),
+    // Fall back to the winner's saved profile wallet when they didn't paste one
+    // at entry time — so wallets still make it onto the export for giveaways
+    // without a wallet task, as long as the winner filled in their profile.
+    db.wallet.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true, chain: true, address: true },
+    }),
+  ]);
   const discordByUser = new Map(discordConnections.map((c) => [c.userId, c.username]));
+
+  // Prefer a profile wallet on the giveaway's own chain; otherwise any wallet.
+  const walletByUser = new Map<string, string>();
+  for (const w of profileWallets) {
+    if (!w.address?.trim()) continue;
+    const isChainMatch = giveaway?.chain != null && w.chain === giveaway.chain;
+    if (isChainMatch || !walletByUser.has(w.userId)) {
+      walletByUser.set(w.userId, w.address.trim());
+    }
+  }
 
   return winners.map((w) => ({
     rank: w.rank,
     name: w.user.name,
     email: w.user.email,
     discordUsername: discordByUser.get(w.userId) ?? null,
-    wallet: walletFromMetadata(w.entry.metadata),
+    wallet: walletFromMetadata(w.entry.metadata) ?? walletByUser.get(w.userId) ?? null,
     enteredAt: w.entry.submittedAt,
     seq: w.entry.seq,
   }));

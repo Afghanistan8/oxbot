@@ -9,6 +9,15 @@ import { PROFILE_WALLET_CHAINS, type WalletAddresses } from "@/lib/constants";
  * the caller's own userId; never accepts an arbitrary id from the client.
  */
 
+/** Whether the user has saved at least one non-empty wallet on their profile. */
+export async function userHasProfileWallet(userId: string): Promise<boolean> {
+  const wallet = await db.wallet.findFirst({
+    where: { userId, address: { not: "" } },
+    select: { id: true },
+  });
+  return wallet !== null;
+}
+
 export async function getUserWallets(userId: string): Promise<WalletAddresses> {
   const rows = await db.wallet.findMany({
     where: { userId, chain: { in: [...PROFILE_WALLET_CHAINS] } },
