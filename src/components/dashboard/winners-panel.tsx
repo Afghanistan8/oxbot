@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 /**
  * WinnersPanel — founder-side draw / re-roll controls + the (private) winner
@@ -60,13 +61,14 @@ export function WinnersPanel({
   canManage: boolean;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
 
-  function run(
+  async function run(
     fn: () => Promise<{ ok: boolean; error?: string; message?: string }>,
     confirmMsg?: string
   ) {
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    if (confirmMsg && !(await confirm({ description: confirmMsg }))) return;
     startTransition(async () => {
       const res = await fn();
       if (res.ok) {

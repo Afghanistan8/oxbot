@@ -8,6 +8,7 @@ import { Ban, RotateCcw, Loader2 } from "lucide-react";
 import { setEntryDisqualifiedAction } from "@/server/actions/winners";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 /**
  * Per-entrant moderation: disqualify (removes any winner slot) or reinstate.
@@ -21,15 +22,20 @@ export function EntrantRowActions({
   disqualified: boolean;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
 
-  function toggle() {
+  async function toggle() {
     const next = !disqualified;
     if (
       next &&
-      !window.confirm(
-        "Disqualify this entry? If they currently hold a winner slot it will be removed — re-roll to backfill."
-      )
+      !(await confirm({
+        title: "Disqualify this entry?",
+        description:
+          "If they currently hold a winner slot it will be removed — re-roll to backfill.",
+        confirmLabel: "Disqualify",
+        variant: "destructive",
+      }))
     ) {
       return;
     }

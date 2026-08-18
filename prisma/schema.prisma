@@ -422,6 +422,9 @@ model Winner {
   rank       Int          @default(1)
   method     WinnerMethod
   selectedAt DateTime     @default(now())
+  // Null until the winner has been shown the in-app "you won!" notification —
+  // drives a one-time toast on their next visit, then gets stamped.
+  notifiedAt DateTime?
 
   giveaway Giveaway @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
   entry    Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
@@ -429,6 +432,7 @@ model Winner {
 
   @@unique([giveawayId, rank])
   @@index([giveawayId])
+  @@index([userId, notifiedAt])
 }
 
 // ---------------------------------------------------------------------------

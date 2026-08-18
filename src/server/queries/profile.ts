@@ -29,6 +29,41 @@ export async function getUserWallets(userId: string): Promise<WalletAddresses> {
   ) as WalletAddresses;
 }
 
+export type UnnotifiedWin = {
+  winnerId: string;
+  giveawayTitle: string;
+  giveawaySlug: string;
+  teamName: string;
+  prize: string;
+  rank: number;
+};
+
+/**
+ * Wins the user hasn't been shown an in-app notification for yet
+ * (`notifiedAt` still null). Drives the site-wide "you won!" toast — shown
+ * once on the first page load after a draw, anywhere in the app, then marked
+ * seen via {@link markWinsNotifiedAction}.
+ */
+export async function getUnnotifiedWins(userId: string): Promise<UnnotifiedWin[]> {
+  const wins = await db.winner.findMany({
+    where: { userId, notifiedAt: null },
+    orderBy: { selectedAt: "asc" },
+    select: {
+      id: true,
+      rank: true,
+      giveaway: { select: { title: true, slug: true, prize: true, team: { select: { name: true } } } },
+    },
+  });
+  return wins.map((w) => ({
+    winnerId: w.id,
+    giveawayTitle: w.giveaway.title,
+    giveawaySlug: w.giveaway.slug,
+    teamName: w.giveaway.team.name,
+    prize: w.giveaway.prize,
+    rank: w.rank,
+  }));
+}
+
 export type WinSummary = {
   giveawayId: string;
   giveawaySlug: string;

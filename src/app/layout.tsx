@@ -5,6 +5,7 @@ import { brand } from "@/lib/brand";
 import { absoluteUrl } from "@/lib/utils";
 import { Providers } from "@/components/providers";
 import { MockModeBanner } from "@/components/brand/mock-mode-banner";
+import { WinNotifierGate } from "@/components/notifications/win-notifier-gate";
 
 import "./globals.css";
 
@@ -89,6 +90,7 @@ export default function RootLayout({
         <Providers>
           {children}
           <MockModeBanner />
+          <WinNotifierGate />
         </Providers>
       </body>
     </html>

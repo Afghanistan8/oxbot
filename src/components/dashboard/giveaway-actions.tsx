@@ -13,6 +13,7 @@ import {
   duplicateGiveawayAction,
 } from "@/server/actions/giveaway";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 /**
  * GiveawayActions — lifecycle controls on the founder management page.
@@ -29,10 +30,14 @@ export function GiveawayActions({
   canAdmin: boolean;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
 
-  function run(fn: () => Promise<{ ok: boolean; error?: string; message?: string }>, confirmMsg?: string) {
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
+  async function run(
+    fn: () => Promise<{ ok: boolean; error?: string; message?: string }>,
+    confirmMsg?: string
+  ) {
+    if (confirmMsg && !(await confirm({ description: confirmMsg, variant: "destructive" }))) return;
     startTransition(async () => {
       const res = await fn();
       if (res.ok) {

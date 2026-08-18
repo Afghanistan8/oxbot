@@ -74,6 +74,22 @@ export async function saveWalletsAction(
   });
 }
 
+// --- Win notifications ---------------------------------------------------
+
+/**
+ * Stamps the given winner rows as notified, so the "you won!" toast never
+ * shows twice. Scoped to the caller's own userId — a winnerId belonging to
+ * someone else is silently ignored, never marked.
+ */
+export async function markWinsNotifiedAction(winnerIds: string[]): Promise<void> {
+  const userId = await requireUserId();
+  if (winnerIds.length === 0) return;
+  await db.winner.updateMany({
+    where: { id: { in: winnerIds }, userId },
+    data: { notifiedAt: new Date() },
+  });
+}
+
 // --- Social connections ------------------------------------------------------
 
 /**
