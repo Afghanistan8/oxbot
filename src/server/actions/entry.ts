@@ -41,6 +41,9 @@ export type EntryResult = {
 /** Thrown inside the tx when a code is exhausted/revoked between check + redeem. */
 class CodeRaceError extends Error {}
 
+/** Thrown inside the tx when the last FCFS slot is taken between check + claim. */
+class FcfsFullError extends Error {}
+
 export async function submitEntryAction(
   giveawayId: string,
   slug: string,
@@ -65,17 +68,17 @@ export async function submitEntryAction(
     });
     if (!giveaway) return fail("Giveaway not found.");
 
-    // Entry window / status gate.
+    // Entry window / status gate. (For FCFS, `phase` reads "ended" once every
+    // slot is claimed — that's how an FCFS giveaway closes.)
     const phase = giveawayPhase(giveaway);
     if (phase === "draft" || phase === "cancelled") {
       return fail("This giveaway isn't open for entries.");
     }
     if (phase === "upcoming") return fail("This giveaway hasn't started yet.");
-    if (phase === "ended" || phase === "finalized") {
-      return fail("This giveaway has closed. Entries are no longer accepted.");
-    }
 
     // Existing entry (for idempotent re-submission + code-double-redeem guard).
+    // Checked BEFORE the closed/full gate so someone who already claimed a spot
+    // always sees their confirmation, even after the giveaway fills up.
     const existing = await db.entry.findUnique({
       where: { giveawayId_userId: { giveawayId, userId } },
       include: { codeUse: { select: { id: true } } },
@@ -87,6 +90,14 @@ export async function submitEntryAction(
       );
     }
     const alreadyRedeemedCode = Boolean(existing?.codeUse);
+
+    // FCFS full → no spots left for a new claimant. Spot-specific message.
+    if (giveaway.type === "FCFS" && giveaway.fcfsCursor >= giveaway.winnersCount) {
+      return fail("All spots have been claimed — this giveaway is now full.");
+    }
+    if (phase === "ended" || phase === "finalized") {
+      return fail("This giveaway has closed. Entries are no longer accepted.");
+    }
 
     // Parse the submission payload.
     const parsed = entrySubmissionSchema.safeParse({
@@ -219,6 +230,12 @@ export async function submitEntryAction(
               select: { fcfsCursor: true },
             });
             assigned = bumped.fcfsCursor;
+            // FCFS hard cap: the claim that would exceed the slot count loses the
+            // race. Throwing rolls back this increment, so exactly `winnersCount`
+            // slots are ever handed out even under concurrent submissions.
+            if (giveaway.type === "FCFS" && assigned > giveaway.winnersCount) {
+              throw new FcfsFullError();
+            }
           }
           await tx.entry.update({
             where: { id: entry.id },
@@ -235,6 +252,9 @@ export async function submitEntryAction(
     } catch (err) {
       if (err instanceof CodeRaceError) {
         return fail("That code just became unavailable. Please try another.");
+      }
+      if (err instanceof FcfsFullError) {
+        return fail("The last spot was just claimed — this giveaway is now full.");
       }
       throw err;
     }

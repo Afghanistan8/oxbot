@@ -25,6 +25,8 @@ export type GiveawayCardData = {
   startAt: Date;
   endAt: Date;
   winnersCount: number;
+  /** FCFS slots claimed so far (drives the "spots left" / full state). */
+  fcfsCursor: number;
   hideEntryCount: boolean;
   /** Only present when the giveaway does not hide its count. */
   entryCount: number | null;

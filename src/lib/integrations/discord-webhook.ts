@@ -23,6 +23,8 @@ export type AnnounceGiveaway = {
   startAt: Date;
   endAt: Date;
   isLive: boolean;
+  /** FCFS has no end time — it closes when all slots are claimed. */
+  isFcfs: boolean;
 };
 
 export async function postGiveawayAnnouncement(
@@ -47,8 +49,10 @@ export async function postGiveawayAnnouncement(
           { name: "Chain", value: giveaway.chainLabel, inline: true },
           { name: "Format", value: giveaway.typeLabel, inline: true },
           {
-            name: "Ends",
-            value: `<t:${Math.floor(giveaway.endAt.getTime() / 1000)}:R>`,
+            name: giveaway.isFcfs ? "Closes" : "Ends",
+            value: giveaway.isFcfs
+              ? "When all spots are claimed"
+              : `<t:${Math.floor(giveaway.endAt.getTime() / 1000)}:R>`,
             inline: true,
           },
         ],

@@ -15,6 +15,7 @@ import type { LucideIcon } from "lucide-react";
 import type { Blockchain, GiveawayType, GiveawayVisibility } from "@prisma/client";
 
 import { createGiveawayAction, updateGiveawayAction } from "@/server/actions/giveaway";
+import { FCFS_SENTINEL_END_AT } from "@/lib/format";
 import type { ActionState } from "@/server/actions/_result";
 import type { ManagedGiveaway } from "@/server/queries/dashboard";
 import {
@@ -153,9 +154,14 @@ export function GiveawayForm({
       <input type="hidden" name="hideEntryCount" value={hideEntryCount ? "true" : "false"} />
       <input type="hidden" name="requirements" value={requirementsJson} />
       {/* Schedule posts as absolute UTC instants (see localInputToIso) — the
-          visible datetime-local fields below carry no name so only these do. */}
+          visible datetime-local fields below carry no name so only these do.
+          FCFS has no author end time, so it posts the far-future sentinel. */}
       <input type="hidden" name="startAt" value={localInputToIso(startAt)} />
-      <input type="hidden" name="endAt" value={localInputToIso(endAt)} />
+      <input
+        type="hidden"
+        name="endAt"
+        value={type === "FCFS" ? FCFS_SENTINEL_END_AT.toISOString() : localInputToIso(endAt)}
+      />
 
       <FormMessage state={state} />
 
@@ -334,7 +340,11 @@ export function GiveawayForm({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Schedule</CardTitle>
-          <CardDescription>Times use your local timezone.</CardDescription>
+          <CardDescription>
+            {type === "FCFS"
+              ? "Set when entry opens — it closes automatically once every slot is claimed."
+              : "Times use your local timezone."}
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2">
           <div>
@@ -348,17 +358,26 @@ export function GiveawayForm({
             />
             <FieldError errors={state.fieldErrors?.startAt} />
           </div>
-          <div>
-            <Label htmlFor="endAt">Ends</Label>
-            <Input
-              id="endAt"
-              type="datetime-local"
-              value={endAt}
-              onChange={(e) => setEndAt(e.target.value)}
-              required
-            />
-            <FieldError errors={state.fieldErrors?.endAt} />
-          </div>
+          {type === "FCFS" ? (
+            <div className="flex items-end">
+              <p className="rounded-xl border border-border bg-ink-black/40 px-4 py-3 text-xs text-muted-foreground">
+                <span className="font-medium text-scarlet-soft">First come, first served.</span>{" "}
+                No end time — entry closes the moment all slots are claimed.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <Label htmlFor="endAt">Ends</Label>
+              <Input
+                id="endAt"
+                type="datetime-local"
+                value={endAt}
+                onChange={(e) => setEndAt(e.target.value)}
+                required
+              />
+              <FieldError errors={state.fieldErrors?.endAt} />
+            </div>
+          )}
         </CardContent>
       </Card>
 

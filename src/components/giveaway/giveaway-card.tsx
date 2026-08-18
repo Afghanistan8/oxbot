@@ -21,6 +21,8 @@ export function GiveawayCard({ giveaway }: { giveaway: GiveawayCardData }) {
   const phase = giveawayPhase(giveaway);
   const phaseMeta = PHASE_META[phase];
   const typeMeta = GIVEAWAY_TYPE_META[giveaway.type];
+  const isFcfs = giveaway.type === "FCFS";
+  const spotsLeft = Math.max(0, giveaway.winnersCount - giveaway.fcfsCursor);
 
   return (
     <motion.div
@@ -92,7 +94,7 @@ export function GiveawayCard({ giveaway }: { giveaway: GiveawayCardData }) {
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <Trophy className="h-3.5 w-3.5" />
-                {giveaway.winnersCount} winner
+                {giveaway.winnersCount} {isFcfs ? "slot" : "winner"}
                 {giveaway.winnersCount === 1 ? "" : "s"}
               </span>
               {!giveaway.hideEntryCount && giveaway.entryCount !== null && (
@@ -104,11 +106,16 @@ export function GiveawayCard({ giveaway }: { giveaway: GiveawayCardData }) {
             </div>
           </div>
 
-          {/* Countdown / ended */}
+          {/* Countdown / spots / ended */}
           <div className="pt-1">
-            {phase === "live" && (
-              <Countdown target={giveaway.endAt} compact endedLabel="Ended" />
-            )}
+            {phase === "live" &&
+              (isFcfs ? (
+                <span className="text-xs font-medium text-scarlet-soft">
+                  {formatNumber(spotsLeft)} of {formatNumber(giveaway.winnersCount)} spots left
+                </span>
+              ) : (
+                <Countdown target={giveaway.endAt} compact endedLabel="Ended" />
+              ))}
             {phase === "upcoming" && (
               <div className="flex items-center gap-2 text-xs text-amber-300">
                 <span>Starts in</span>
@@ -117,7 +124,11 @@ export function GiveawayCard({ giveaway }: { giveaway: GiveawayCardData }) {
             )}
             {(phase === "ended" || phase === "finalized") && (
               <span className="text-xs text-muted-foreground">
-                {phase === "finalized" ? "Winners announced" : "Entry closed"}
+                {phase === "finalized"
+                  ? "Winners announced"
+                  : isFcfs
+                    ? "All spots claimed"
+                    : "Entry closed"}
               </span>
             )}
           </div>

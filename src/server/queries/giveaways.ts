@@ -34,6 +34,7 @@ function toCardData(g: GiveawayWithTeamAndCount): GiveawayCardData {
     startAt: g.startAt,
     endAt: g.endAt,
     winnersCount: g.winnersCount,
+    fcfsCursor: g.fcfsCursor,
     hideEntryCount: g.hideEntryCount,
     // Only expose a count when the creator hasn't hidden it.
     entryCount: g.hideEntryCount ? null : g._count.entries,

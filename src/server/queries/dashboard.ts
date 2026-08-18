@@ -26,6 +26,7 @@ export type DashboardGiveaway = {
   startAt: Date;
   endAt: Date;
   winnersCount: number;
+  fcfsCursor: number;
   hideEntryCount: boolean;
   entryCount: number;
   completedCount: number;
@@ -64,6 +65,7 @@ export async function getTeamGiveaways(teamId: string): Promise<DashboardGiveawa
     startAt: g.startAt,
     endAt: g.endAt,
     winnersCount: g.winnersCount,
+    fcfsCursor: g.fcfsCursor,
     hideEntryCount: g.hideEntryCount,
     entryCount: g._count.entries,
     completedCount: completedMap.get(g.id) ?? 0,
@@ -93,6 +95,7 @@ export type ManagedGiveaway = {
   visibility: import("@prisma/client").GiveawayVisibility;
   status: GiveawayStatus;
   winnersCount: number;
+  fcfsCursor: number;
   startAt: Date;
   endAt: Date;
   hideEntryCount: boolean;
@@ -144,6 +147,7 @@ export async function getManagedGiveaway(
     visibility: g.visibility,
     status: g.status,
     winnersCount: g.winnersCount,
+    fcfsCursor: g.fcfsCursor,
     startAt: g.startAt,
     endAt: g.endAt,
     hideEntryCount: g.hideEntryCount,

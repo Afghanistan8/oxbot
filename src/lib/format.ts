@@ -1,8 +1,30 @@
-import type { Giveaway, GiveawayStatus } from "@prisma/client";
+import type { GiveawayStatus, GiveawayType } from "@prisma/client";
 
 /**
  * Date / time formatting + giveaway timing helpers.
  */
+
+/**
+ * FCFS giveaways have no author-set end time — they close automatically once
+ * every slot is claimed. The schema still needs a non-null `endAt`, so FCFS
+ * rows store this far-future sentinel and the slot count is the real close
+ * condition (see {@link isFcfsFull}).
+ */
+export const FCFS_SENTINEL_END_AT = new Date("2099-12-31T23:59:59.000Z");
+
+type FcfsFillInput = {
+  type?: GiveawayType | null;
+  winnersCount?: number | null;
+  /** Completed FCFS claims so far (the giveaway's `fcfsCursor`). */
+  fcfsCursor?: number | null;
+};
+
+/** True when an FCFS giveaway has had all of its slots claimed. */
+export function isFcfsFull(g: FcfsFillInput): boolean {
+  if (g.type !== "FCFS") return false;
+  const slots = g.winnersCount ?? 0;
+  return slots > 0 && (g.fcfsCursor ?? 0) >= slots;
+}
 
 /**
  * Format a date for display (e.g. "Aug 12, 2026, 3:40 PM").
@@ -63,10 +85,18 @@ export function humanizeMs(ms: number): string {
  */
 export type GiveawayPhase = "upcoming" | "live" | "ended" | "finalized" | "draft" | "cancelled";
 
-export function giveawayPhase(
-  g: Pick<Giveaway, "status" | "startAt" | "endAt">,
-  now: Date = new Date()
-): GiveawayPhase {
+/**
+ * Minimal shape needed to compute a phase. FCFS fields are optional: pass them
+ * (type + winnersCount + fcfsCursor) to have an FCFS giveaway close as soon as
+ * every slot is claimed rather than waiting on a clock.
+ */
+export type PhaseInput = {
+  status: GiveawayStatus;
+  startAt: Date | string;
+  endAt: Date | string;
+} & FcfsFillInput;
+
+export function giveawayPhase(g: PhaseInput, now: Date = new Date()): GiveawayPhase {
   if (g.status === "DRAFT") return "draft";
   if (g.status === "CANCELLED") return "cancelled";
   if (g.status === "FINALIZED") return "finalized";
@@ -74,15 +104,14 @@ export function giveawayPhase(
   const end = new Date(g.endAt).getTime();
   const t = now.getTime();
   if (t < start) return "upcoming";
+  // FCFS closes the moment all slots are claimed, independent of the clock.
+  if (isFcfsFull(g)) return "ended";
   if (t > end) return "ended";
   return "live";
 }
 
 /** Is the giveaway currently accepting entries? */
-export function isAcceptingEntries(
-  g: Pick<Giveaway, "status" | "startAt" | "endAt">,
-  now: Date = new Date()
-): boolean {
+export function isAcceptingEntries(g: PhaseInput, now: Date = new Date()): boolean {
   const phase = giveawayPhase(g, now);
   return phase === "live";
 }

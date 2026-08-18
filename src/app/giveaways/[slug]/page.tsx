@@ -93,6 +93,8 @@ export default async function PublicGiveawayPage({
   const phase = giveawayPhase(giveaway);
   const phaseMeta = PHASE_META[phase];
   const typeMeta = GIVEAWAY_TYPE_META[giveaway.type];
+  const isFcfs = giveaway.type === "FCFS";
+  const spotsLeft = Math.max(0, giveaway.winnersCount - giveaway.fcfsCursor);
 
   // Winners are public once drawn.
   const winners =
@@ -202,22 +204,45 @@ export default async function PublicGiveawayPage({
                   label="Entries"
                   value={giveaway.entryCount === null ? "Hidden" : formatNumber(giveaway.entryCount)}
                 />
-                <MetaStat
-                  icon={CalendarClock}
-                  label={phase === "upcoming" ? "Starts" : "Ends"}
-                  value={<LocalTime value={phase === "upcoming" ? giveaway.startAt : giveaway.endAt} />}
-                />
+                {isFcfs ? (
+                  <MetaStat
+                    icon={Trophy}
+                    label="Claimed"
+                    value={`${formatNumber(giveaway.fcfsCursor)} / ${formatNumber(giveaway.winnersCount)}`}
+                  />
+                ) : (
+                  <MetaStat
+                    icon={CalendarClock}
+                    label={phase === "upcoming" ? "Starts" : "Ends"}
+                    value={<LocalTime value={phase === "upcoming" ? giveaway.startAt : giveaway.endAt} />}
+                  />
+                )}
               </div>
 
-              {/* Countdown */}
-              {(phase === "live" || phase === "upcoming") && (
+              {/* Countdown / FCFS spots */}
+              {isFcfs && phase === "live" ? (
+                <div className="mt-6 rounded-2xl border border-border bg-card/40 p-5">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Spots remaining
+                  </p>
+                  <p className="font-display text-3xl font-bold text-white">
+                    {formatNumber(spotsLeft)}{" "}
+                    <span className="text-lg font-normal text-muted-foreground">
+                      of {formatNumber(giveaway.winnersCount)}
+                    </span>
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    First come, first served — entry closes the moment every spot is claimed.
+                  </p>
+                </div>
+              ) : phase === "live" || phase === "upcoming" ? (
                 <div className="mt-6 rounded-2xl border border-border bg-card/40 p-5">
                   <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     {phase === "upcoming" ? "Entry opens in" : "Entry closes in"}
                   </p>
                   <Countdown target={phase === "upcoming" ? giveaway.startAt : giveaway.endAt} />
                 </div>
-              )}
+              ) : null}
 
               {/* Winners (once drawn) */}
               {winners.length > 0 && (

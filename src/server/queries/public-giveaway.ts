@@ -53,6 +53,8 @@ export type PublicGiveawayDetail = {
   visibility: GiveawayVisibility;
   chain: Blockchain;
   winnersCount: number;
+  /** FCFS slots claimed so far (the giveaway's `fcfsCursor`). */
+  fcfsCursor: number;
   startAt: Date;
   endAt: Date;
   hideEntryCount: boolean;
@@ -154,6 +156,7 @@ export async function getPublicGiveaway(
     visibility: g.visibility,
     chain: g.chain,
     winnersCount: g.winnersCount,
+    fcfsCursor: g.fcfsCursor,
     startAt: g.startAt,
     endAt: g.endAt,
     hideEntryCount: g.hideEntryCount,

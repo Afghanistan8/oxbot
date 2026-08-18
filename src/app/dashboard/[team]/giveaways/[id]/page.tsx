@@ -174,7 +174,14 @@ export default async function ManageGiveawayPage({
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <Row label="Starts" value={<LocalTime value={giveaway.startAt} />} />
-            <Row label="Ends" value={<LocalTime value={giveaway.endAt} />} />
+            {giveaway.type === "FCFS" ? (
+              <Row
+                label="Ends"
+                value={`When all ${giveaway.winnersCount} slots are claimed (${giveaway.fcfsCursor}/${giveaway.winnersCount})`}
+              />
+            ) : (
+              <Row label="Ends" value={<LocalTime value={giveaway.endAt} />} />
+            )}
             {giveaway.drawnAt && <Row label="Drawn" value={<LocalTime value={giveaway.drawnAt} />} />}
           </CardContent>
         </Card>

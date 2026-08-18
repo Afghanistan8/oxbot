@@ -10,6 +10,7 @@ import { recordAudit } from "@/lib/audit";
 import { uniqueGiveawaySlug } from "@/lib/slug";
 import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { generateUniqueCodes } from "@/lib/giveaway/codes";
+import { FCFS_SENTINEL_END_AT } from "@/lib/format";
 import { postGiveawayAnnouncement } from "@/lib/integrations/discord-webhook";
 import { absoluteUrl } from "@/lib/utils";
 import { CHAIN_META, GIVEAWAY_TYPE_META } from "@/lib/constants";
@@ -111,6 +112,9 @@ export async function createGiveawayAction(
         return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
       }
       const data = parsed.data;
+      // FCFS has no author-set end — it closes when all slots are claimed. Store
+      // the far-future sentinel so the clock never ends it prematurely.
+      if (data.type === "FCFS") data.endAt = FCFS_SENTINEL_END_AT;
 
       // Guard: can't publish something already past its end.
       if (publish && data.endAt.getTime() <= Date.now()) {
@@ -213,6 +217,8 @@ export async function updateGiveawayAction(
       return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
     }
     const data = parsed.data;
+    // FCFS closes on slots-claimed, not the clock — keep the sentinel end date.
+    if (data.type === "FCFS") data.endAt = FCFS_SENTINEL_END_AT;
 
     // Once entries exist, requirements are locked to protect fairness.
     const entryCount = await db.entry.count({ where: { giveawayId } });
@@ -505,6 +511,7 @@ async function announceGiveaway(
     startAt: giveaway.startAt,
     endAt: giveaway.endAt,
     isLive: giveaway.status === "ACTIVE",
+    isFcfs: giveaway.type === "FCFS",
   });
 
   if (!result.ok) {

@@ -577,15 +577,23 @@ function ClosedState({
   type: GiveawayType;
 }) {
   const entered = viewerEntry?.status === "COMPLETED";
+  // FCFS "ended" means every slot was claimed, not that a clock ran out.
+  const endedCopy =
+    type === "FCFS"
+      ? {
+          title: "All spots claimed",
+          body: "Every slot in this first-come-first-served giveaway has been taken.",
+        }
+      : {
+          title: "Entry has closed",
+          body: "The entry window is over. Winners will be announced shortly.",
+        };
   const copy: Record<string, { title: string; body: string }> = {
     upcoming: {
       title: "Entry opens soon",
       body: "This giveaway hasn't started yet. Check back when the countdown begins.",
     },
-    ended: {
-      title: "Entry has closed",
-      body: "The entry window is over. Winners will be announced shortly.",
-    },
+    ended: endedCopy,
     finalized: {
       title: "Winners have been drawn",
       body: "This giveaway is complete. See the winners on this page.",
