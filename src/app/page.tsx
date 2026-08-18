@@ -11,11 +11,13 @@ import {
   activePublicChains,
   countLivePublicGiveaways,
 } from "@/server/queries/giveaways";
+import { getPlatformFounders, type PlatformFounder } from "@/server/queries/founders";
 import type { GiveawayCardData } from "@/types/giveaway";
 
 import { SiteHeader } from "@/components/brand/site-header";
 import { SiteFooter } from "@/components/brand/site-footer";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { GiveawayCard } from "@/components/giveaway/giveaway-card";
 import { GiveawayFilters } from "@/components/giveaway/giveaway-filters";
 import { HowItWorks } from "@/components/marketing/how-it-works";
@@ -57,11 +59,13 @@ export default async function LandingPage({
   let giveaways: GiveawayCardData[] = [];
   let chains: Blockchain[] = [];
   let liveCount = 0;
+  let founders: PlatformFounder[] = [];
   try {
-    [giveaways, chains, liveCount] = await Promise.all([
+    [giveaways, chains, liveCount, founders] = await Promise.all([
       listPublicGiveaways({ chain, sort, liveOnly }),
       activePublicChains(),
       countLivePublicGiveaways(),
+      getPlatformFounders(),
     ]);
   } catch {
     // DB unavailable (e.g. no DATABASE_URL yet) — show the empty state.
@@ -115,6 +119,8 @@ export default async function LandingPage({
         </div>
 
         <HowItWorks />
+
+        <FoundersSection founders={founders} />
 
         <CtaBand launchCta={launchCta} />
       </main>
@@ -270,6 +276,60 @@ function EmptyState({
       </Button>
     </div>
   );
+}
+
+function FoundersSection({ founders }: { founders: PlatformFounder[] }) {
+  if (!founders || founders.length === 0) return null;
+
+  return (
+    <section className="container py-16">
+      <div className="mx-auto max-w-2xl text-center">
+        <p className="text-sm font-semibold uppercase tracking-widest text-gold/80">
+          Team members
+        </p>
+        <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          The team behind <span className="text-gradient-crimson">{brand.name}</span>
+        </h2>
+      </div>
+
+      <div className="mx-auto mt-12 flex flex-wrap justify-center gap-6">
+        {founders.map((f, i) => (
+          <div
+            key={`${f.handle ?? f.name ?? "founder"}-${i}`}
+            className="w-full max-w-sm rounded-3xl border border-border bg-card/40 p-8"
+          >
+            <Avatar className="h-24 w-24 rounded-2xl">
+              {f.image && <AvatarImage src={f.image} alt="" className="rounded-2xl object-cover" />}
+              <AvatarFallback className="rounded-2xl text-xl">
+                {founderInitials(f.name ?? f.handle ?? "?")}
+              </AvatarFallback>
+            </Avatar>
+            <p className="mt-5 text-xs font-semibold uppercase tracking-wider text-gold/80">
+              {f.role}
+            </p>
+            {f.name && (
+              <p className="mt-1 font-display text-2xl font-bold text-white">{f.name}</p>
+            )}
+            {f.handle && (
+              <a
+                href={`https://x.com/${f.handle.replace(/^@/, "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-block text-sm text-muted-foreground transition-colors hover:text-scarlet-soft"
+              >
+                @{f.handle.replace(/^@/, "")}
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function founderInitials(value: string): string {
+  const parts = value.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0]?.toUpperCase() ?? "").join("") || "?";
 }
 
 function CtaBand({ launchCta }: { launchCta: { href: string; label: string } }) {
