@@ -3,89 +3,90 @@
 @tailwind utilities;
 
 /**
- * oxbot — dark, crimson design system (dark mode only).
+ * oxbot — dark, gold design system (dark mode only).
  *
  * shadcn/ui semantic tokens are expressed as HSL triples so Tailwind can apply
- * opacity modifiers. The whole system is tuned around a deep blood-red primary,
- * scarlet accents, near-black backgrounds, and warm gold for winners/CTAs.
+ * opacity modifiers. The whole system is tuned around a warm near-black base,
+ * a single warm-gold primary accent, and a muted sand/khaki neutral for body
+ * text — no red anywhere.
  */
 
 @layer base {
   :root {
     /* We ship dark-only, but define tokens on :root so SSR has them immediately. */
 
-    /* Backgrounds — warm grainy red-brown (olive-khaki × crimson), not black */
-    --background: 8 30% 11%;           /* ~#241614 warm dark red-brown */
-    --foreground: 30 25% 96%;          /* warm near-white */
+    /* Backgrounds — warm near-black, not pure black */
+    --background: 40 7% 3%;            /* ~#080807 */
+    --foreground: 0 0% 100%;           /* pure white */
 
-    /* Cards & popovers — elevated warm red-brown surfaces */
-    --card: 8 28% 14%;                 /* ~#2E1C1A */
-    --card-foreground: 30 25% 96%;
-    --popover: 8 30% 13%;              /* ~#2C1917 */
-    --popover-foreground: 30 25% 96%;
+    /* Cards & popovers — subtly elevated warm near-black surfaces */
+    --card: 40 6% 7%;                  /* ~#131210 */
+    --card-foreground: 0 0% 100%;
+    --popover: 40 6% 6%;               /* ~#110F0E */
+    --popover-foreground: 0 0% 100%;
 
-    /* Primary — deep crimson (the red soul, unchanged) */
-    --primary: 350 73% 44%;           /* #C41E3A */
-    --primary-foreground: 0 0% 100%;
+    /* Primary — warm gold (the single accent hue) */
+    --primary: 43 69% 51%;            /* #D8A72A */
+    --primary-foreground: 0 0% 4%;
 
-    /* Secondary — muted warm red-brown */
-    --secondary: 8 24% 20%;
-    --secondary-foreground: 30 20% 95%;
+    /* Secondary — dark warm-neutral surface */
+    --secondary: 40 6% 12%;
+    --secondary-foreground: 44 20% 88%;
 
-    /* Muted — for body text + subtle surfaces */
-    --muted: 8 18% 22%;
-    --muted-foreground: 24 15% 68%;   /* warm gray body text */
+    /* Muted — sand/khaki body text + subtle surfaces */
+    --muted: 40 6% 12%;
+    --muted-foreground: 44 20% 65%;   /* ~#B7AD92 */
 
-    /* Accent — warm crimson hover surfaces */
-    --accent: 6 40% 26%;
+    /* Accent — warm gold-tinted hover surfaces */
+    --accent: 43 30% 18%;
     --accent-foreground: 0 0% 100%;
 
-    /* Destructive — brighter scarlet */
+    /* Destructive — kept red: universal error-state convention, not a brand color */
     --destructive: 0 84% 60%;         /* #EF4444 */
     --destructive-foreground: 0 0% 100%;
 
-    /* Borders, inputs, focus rings — warm crimson-brown */
-    --border: 8 32% 24%;
-    --input: 8 26% 20%;
-    --ring: 350 73% 52%;
+    /* Borders, inputs, focus rings — warm near-black hairlines */
+    --border: 40 8% 16%;
+    --input: 40 8% 13%;
+    --ring: 43 69% 55%;
 
-    /* Winner / premium accent — warm gold */
-    --gold: 43 88% 64%;               /* #F5C451 */
-    --gold-foreground: 40 30% 8%;
+    /* Winner / premium highlight — lighter gold */
+    --gold: 46 84% 72%;               /* #F3D77A */
+    --gold-foreground: 0 0% 6%;
 
     --radius: 0.85rem;
 
-    /* Chart palette (crimson → gold spectrum) for dashboard analytics. */
-    --chart-1: 350 73% 50%;
-    --chart-2: 0 84% 60%;
-    --chart-3: 43 88% 64%;
-    --chart-4: 351 40% 35%;
-    --chart-5: 12 76% 55%;
+    /* Chart palette — a single gold spectrum, light to dark. */
+    --chart-1: 43 69% 55%;
+    --chart-2: 46 84% 72%;
+    --chart-3: 44 20% 65%;
+    --chart-4: 40 6% 30%;
+    --chart-5: 43 50% 40%;
   }
 
   /* Dark mode only — mirror the root tokens so `.dark` selectors resolve. */
   .dark {
-    --background: 8 30% 11%;
-    --foreground: 30 25% 96%;
-    --card: 8 28% 14%;
-    --card-foreground: 30 25% 96%;
-    --popover: 8 30% 13%;
-    --popover-foreground: 30 25% 96%;
-    --primary: 350 73% 44%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 8 24% 20%;
-    --secondary-foreground: 30 20% 95%;
-    --muted: 8 18% 22%;
-    --muted-foreground: 24 15% 68%;
-    --accent: 6 40% 26%;
+    --background: 40 7% 3%;
+    --foreground: 0 0% 100%;
+    --card: 40 6% 7%;
+    --card-foreground: 0 0% 100%;
+    --popover: 40 6% 6%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 43 69% 51%;
+    --primary-foreground: 0 0% 4%;
+    --secondary: 40 6% 12%;
+    --secondary-foreground: 44 20% 88%;
+    --muted: 40 6% 12%;
+    --muted-foreground: 44 20% 65%;
+    --accent: 43 30% 18%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 8 32% 24%;
-    --input: 8 26% 20%;
-    --ring: 350 73% 52%;
-    --gold: 43 88% 64%;
-    --gold-foreground: 40 30% 8%;
+    --border: 40 8% 16%;
+    --input: 40 8% 13%;
+    --ring: 43 69% 55%;
+    --gold: 46 84% 72%;
+    --gold-foreground: 0 0% 6%;
   }
 }
 
@@ -102,10 +103,10 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
-    /* Subtle ambient crimson glow anchored to the top of every page. */
+    /* Subtle ambient gold glow anchored to the top of every page. */
     background-image:
-      radial-gradient(70% 55% at 50% -8%, rgba(196, 30, 58, 0.14) 0%, rgba(10, 10, 10, 0) 60%),
-      radial-gradient(40% 40% at 100% 0%, rgba(239, 68, 68, 0.06) 0%, rgba(10, 10, 10, 0) 50%);
+      radial-gradient(70% 55% at 50% -8%, rgba(216, 167, 42, 0.14) 0%, rgba(8, 8, 7, 0) 60%),
+      radial-gradient(40% 40% at 100% 0%, rgba(243, 215, 122, 0.06) 0%, rgba(8, 8, 7, 0) 50%);
     background-attachment: fixed;
     position: relative;
   }
@@ -127,7 +128,7 @@
   }
 
   ::selection {
-    background: rgba(196, 30, 58, 0.35);
+    background: rgba(216, 167, 42, 0.35);
     color: #fff;
   }
 
@@ -155,7 +156,7 @@
 }
 
 @layer components {
-  /* Reusable crimson text gradient for display headings. */
+  /* Reusable gold text gradient for display headings. */
   .text-gradient-crimson {
     @apply bg-gradient-to-br from-white via-rose-highlight to-crimson bg-clip-text text-transparent;
   }
@@ -164,26 +165,26 @@
     @apply bg-gold-gradient bg-clip-text text-transparent;
   }
 
-  /* Glass surface with a soft red glow — used for premium cards. Warm
-     red-brown translucent tint to match the new grainy base. */
+  /* Glass surface with a soft gold glow — used for premium cards. Warm
+     near-black translucent tint to match the new dark base. */
   .glass-red {
     background: linear-gradient(
       180deg,
-      rgba(46, 28, 26, 0.75) 0%,
-      rgba(36, 22, 20, 0.6) 100%
+      rgba(19, 18, 16, 0.75) 0%,
+      rgba(8, 8, 7, 0.6) 100%
     );
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid hsl(var(--border));
   }
 
-  /* Thin crimson divider with a fading glow. */
+  /* Thin gold divider with a fading glow. */
   .divider-glow {
     height: 1px;
     background: linear-gradient(
       90deg,
       transparent,
-      rgba(196, 30, 58, 0.6),
+      rgba(216, 167, 42, 0.6),
       transparent
     );
   }
@@ -209,11 +210,11 @@
 }
 
 @layer utilities {
-  /* Grid backdrop for hero sections (subtle red lines). */
+  /* Grid backdrop for hero sections (subtle gold lines). */
   .bg-grid-red {
     background-image:
-      linear-gradient(to right, rgba(196, 30, 58, 0.06) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(196, 30, 58, 0.06) 1px, transparent 1px);
+      linear-gradient(to right, rgba(216, 167, 42, 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(216, 167, 42, 0.06) 1px, transparent 1px);
     background-size: 44px 44px;
   }
 

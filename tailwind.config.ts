@@ -5,14 +5,16 @@ import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 
 /**
- * oxbot design system — "a premium Web3 giveaway platform with a fierce, elegant red soul."
+ * oxbot design system — a premium Web3 giveaway platform in warm near-black + gold.
  *
- * Dark mode only. The palette is dominated by deep crimson/blood-red with scarlet accents,
- * near-black backgrounds, red-tinted elevated surfaces, and warm gold for winners/CTAs.
+ * Dark mode only. The palette is a single warm-gold accent over a near-black base,
+ * with a muted sand/khaki neutral for body text — no red anywhere.
  *
  * shadcn/ui reads the semantic HSL CSS variables (defined in globals.css); the raw brand
  * colors below are exposed as Tailwind utilities (e.g. `bg-crimson`, `text-scarlet`,
- * `shadow-glow-red`) for bespoke marketing/UI work.
+ * `shadow-glow-red`) for bespoke marketing/UI work. Class/token NAMES were kept as-is
+ * (crimson/scarlet/ink/etc.) to avoid touching every component that references them —
+ * only the underlying hex values changed, from red to gold.
  */
 const config: Config = {
   darkMode: "class",
@@ -32,45 +34,47 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // ---- Raw brand palette (the red soul) ----
+        // ---- Raw brand palette (the gold soul) ----
+        // NOTE: named "crimson" for historical/low-churn reasons — every value
+        // below is gold, not red. See file header.
         crimson: {
-          DEFAULT: "#C41E3A", // deep crimson / blood red — primary
-          deep: "#B91C1C", // rich dark red alt-primary
-          50: "#FDF2F3",
-          100: "#FCE4E7",
-          200: "#F8C4CB",
-          300: "#F2939F",
-          400: "#E85A6C",
-          500: "#C41E3A",
-          600: "#A81730",
-          700: "#8A1228",
-          800: "#6B0E20",
-          900: "#4A0A16",
-          950: "#2A050C",
+          DEFAULT: "#D8A72A", // warm gold — primary
+          deep: "#BA8B1F", // deeper gold alt-primary
+          50: "#FEFAF0",
+          100: "#FCF1D6",
+          200: "#F8E2AC",
+          300: "#F3D77A",
+          400: "#E4BE55",
+          500: "#D8A72A",
+          600: "#BA8B1F",
+          700: "#8F6B18",
+          800: "#644B11",
+          900: "#3A2B0A",
+          950: "#201704",
         },
         scarlet: {
-          DEFAULT: "#EF4444", // brighter scarlet — hover / accent
-          soft: "#F87171",
+          DEFAULT: "#F3D77A", // light gold — hover / accent highlight
+          soft: "#F6DFA0",
         },
         rose: {
-          highlight: "#FDA4AF", // soft rose highlight
+          highlight: "#F8E2AC", // soft gold highlight
         },
         gold: {
-          DEFAULT: "#F5C451", // warm amber/gold — winners + premium CTAs
-          soft: "#FBE39A",
-          deep: "#D9A441",
+          DEFAULT: "#D8A72A", // warm gold — winners + premium CTAs
+          soft: "#F3D77A",
+          deep: "#BA8B1F",
         },
         ink: {
-          // Warm red-brown base (olive-khaki × crimson), matched to the
-          // --background/--card tokens so translucent `bg-ink-black/40` insets
-          // read as a subtle darkening of the warm surface, never cold black.
-          black: "#241614", // deepest warm base (≈ --background)
-          charcoal: "#2E1C1A", // warm charcoal (≈ --card)
+          // Warm near-black base, matched to the --background/--card tokens so
+          // translucent `bg-ink-black/40` insets read as a subtle darkening of
+          // the warm surface, never cold black.
+          black: "#080807", // deepest warm base (≈ --background)
+          charcoal: "#131210", // warm charcoal (≈ --card)
         },
         surface: {
-          DEFAULT: "#2E1C1A", // elevated warm red-brown surface
-          raised: "#37231F", // slightly more elevated surface
-          border: "#5C302C", // warm crimson-brown border
+          DEFAULT: "#131210", // elevated warm near-black surface
+          raised: "#1B1917", // slightly more elevated surface
+          border: "#2A2722", // warm hairline border
         },
 
         // ---- shadcn/ui semantic tokens (HSL vars from globals.css) ----
@@ -121,24 +125,24 @@ const config: Config = {
         mono: ["var(--font-mono)", "ui-monospace", "monospace"],
       },
       backgroundImage: {
-        // Dramatic dark → crimson gradients for hero sections and cards.
+        // Dramatic dark → gold gradients for hero sections and cards.
         "hero-radial":
-          "radial-gradient(80% 80% at 50% -10%, rgba(196,30,58,0.35) 0%, rgba(120,15,32,0.12) 40%, rgba(10,10,10,0) 70%)",
+          "radial-gradient(80% 80% at 50% -10%, rgba(216,167,42,0.28) 0%, rgba(186,139,31,0.10) 40%, rgba(8,8,7,0) 70%)",
         "crimson-gradient":
-          "linear-gradient(135deg, #C41E3A 0%, #8A1228 55%, #4A0A16 100%)",
+          "linear-gradient(135deg, #D8A72A 0%, #BA8B1F 55%, #3A2B0A 100%)",
         "crimson-sheen":
-          "linear-gradient(135deg, rgba(239,68,68,0.16) 0%, rgba(196,30,58,0.05) 40%, rgba(10,10,10,0) 80%)",
+          "linear-gradient(135deg, rgba(243,215,122,0.16) 0%, rgba(216,167,42,0.05) 40%, rgba(8,8,7,0) 80%)",
         "card-glow":
-          "radial-gradient(120% 120% at 0% 0%, rgba(196,30,58,0.12) 0%, rgba(26,15,16,0) 55%)",
+          "radial-gradient(120% 120% at 0% 0%, rgba(216,167,42,0.12) 0%, rgba(19,18,16,0) 55%)",
         "gold-gradient":
-          "linear-gradient(135deg, #FBE39A 0%, #F5C451 45%, #D9A441 100%)",
+          "linear-gradient(135deg, #F3D77A 0%, #D8A72A 45%, #BA8B1F 100%)",
       },
       boxShadow: {
-        "glow-red": "0 0 0 1px rgba(196,30,58,0.35), 0 8px 40px -8px rgba(196,30,58,0.45)",
-        "glow-red-lg": "0 0 0 1px rgba(239,68,68,0.4), 0 20px 70px -12px rgba(196,30,58,0.6)",
-        "glow-gold": "0 0 0 1px rgba(245,196,81,0.4), 0 10px 40px -8px rgba(245,196,81,0.4)",
-        "inner-red": "inset 0 1px 0 0 rgba(255,255,255,0.04), inset 0 0 24px -12px rgba(196,30,58,0.5)",
-        card: "0 10px 30px -12px rgba(0,0,0,0.7), 0 0 0 1px rgba(63,26,29,0.6)",
+        "glow-red": "0 0 0 1px rgba(216,167,42,0.35), 0 8px 40px -8px rgba(216,167,42,0.45)",
+        "glow-red-lg": "0 0 0 1px rgba(243,215,122,0.4), 0 20px 70px -12px rgba(216,167,42,0.6)",
+        "glow-gold": "0 0 0 1px rgba(243,215,122,0.4), 0 10px 40px -8px rgba(243,215,122,0.4)",
+        "inner-red": "inset 0 1px 0 0 rgba(255,255,255,0.04), inset 0 0 24px -12px rgba(216,167,42,0.5)",
+        card: "0 10px 30px -12px rgba(0,0,0,0.7), 0 0 0 1px rgba(42,39,34,0.6)",
       },
       keyframes: {
         "accordion-down": {

@@ -109,16 +109,16 @@ export async function sendMagicLinkEmail(to: string, url: string): Promise<void>
 
 function magicLinkTemplate(url: string): string {
   return `
-  <div style="background:#241614;padding:40px 0;font-family:Inter,Arial,sans-serif;">
-    <div style="max-width:480px;margin:0 auto;background:#1A0F10;border:1px solid #3F1A1D;border-radius:20px;padding:36px;color:#fff;">
-      <h1 style="margin:0 0 8px;font-size:22px;background:linear-gradient(135deg,#fff,#EF4444);-webkit-background-clip:text;background-clip:text;color:transparent;">${brand.name}</h1>
-      <p style="color:#b9a9ab;font-size:14px;line-height:1.6;margin:0 0 24px;">
+  <div style="background:#080807;padding:40px 0;font-family:Inter,Arial,sans-serif;">
+    <div style="max-width:480px;margin:0 auto;background:#131210;border:1px solid #2A2722;border-radius:20px;padding:36px;color:#fff;">
+      <h1 style="margin:0 0 8px;font-size:22px;background:linear-gradient(135deg,#fff,#F3D77A);-webkit-background-clip:text;background-clip:text;color:transparent;">${brand.name}</h1>
+      <p style="color:#B7AD92;font-size:14px;line-height:1.6;margin:0 0 24px;">
         Click the button below to securely sign in. This link expires soon and can only be used once.
       </p>
-      <a href="${url}" style="display:inline-block;background:linear-gradient(135deg,#C41E3A,#8A1228);color:#fff;text-decoration:none;padding:12px 28px;border-radius:12px;font-weight:600;font-size:14px;">
+      <a href="${url}" style="display:inline-block;background:linear-gradient(135deg,#D8A72A,#BA8B1F);color:#090506;text-decoration:none;padding:12px 28px;border-radius:12px;font-weight:600;font-size:14px;">
         Sign in to ${brand.name}
       </a>
-      <p style="color:#6b5a5c;font-size:12px;margin:24px 0 0;line-height:1.6;">
+      <p style="color:#7A7264;font-size:12px;margin:24px 0 0;line-height:1.6;">
         If you didn't request this, you can safely ignore this email.
       </p>
     </div>

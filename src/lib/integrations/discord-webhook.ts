@@ -10,7 +10,7 @@
  * it just doesn't get announced, which is logged, not thrown.
  */
 
-const CRIMSON = 0xc41e3a;
+const CRIMSON = 0xd8a72a; // brand accent color for the embed sidebar (now gold)
 
 export type AnnounceGiveaway = {
   title: string;
