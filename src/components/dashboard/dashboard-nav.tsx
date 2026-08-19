@@ -11,6 +11,7 @@ import {
   ChevronsUpDown,
   Check,
   BookOpen,
+  ChartBar,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -41,6 +42,7 @@ export function DashboardNav({ teams }: { teams: TeamListItem[] }) {
     ? [
         { href: base, label: "Overview", icon: LayoutDashboard, exact: true },
         { href: `${base}/giveaways`, label: "Giveaways", icon: Gift },
+        { href: `${base}/analytics`, label: "Analytics", icon: ChartBar },
         { href: `${base}/members`, label: "Members", icon: Users },
         { href: `${base}/settings`, label: "Settings", icon: Settings },
       ]

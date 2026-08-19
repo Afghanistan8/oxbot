@@ -193,6 +193,147 @@ export async function getTeamStats(teamId: string): Promise<TeamStats> {
   return { totalGiveaways, activeGiveaways, totalEntries, totalWinners };
 }
 
+// ---------------------------------------------------------------------------
+// Entry stats (per-project entry trends for the analytics page)
+// ---------------------------------------------------------------------------
+
+export type EntryStatsRange = "week" | "month" | "year";
+
+export type EntryStatsSeries = {
+  /** "other" for the folded bucket of low-volume giveaways; otherwise the giveaway id. */
+  key: string;
+  title: string;
+  total: number;
+};
+
+export type EntryStatsPoint = {
+  bucket: string;
+  /** Per-series entry counts for this bucket, keyed by series.key. */
+  values: Record<string, number>;
+};
+
+export type TeamEntryStats = {
+  range: EntryStatsRange;
+  series: EntryStatsSeries[];
+  points: EntryStatsPoint[];
+  totalAllTime: number;
+  totalInRange: number;
+  topGiveaway: { title: string; total: number } | null;
+};
+
+const MAX_SERIES = 7; // Cove palette has 8 slots; the 8th is reserved for "Other".
+
+/** Start of the range window for a given granularity, relative to `now`. */
+function rangeStart(range: EntryStatsRange, now: Date): Date {
+  const d = new Date(now);
+  if (range === "week") {
+    d.setDate(d.getDate() - 6);
+  } else if (range === "month") {
+    d.setDate(d.getDate() - 29);
+  } else {
+    d.setMonth(d.getMonth() - 11);
+  }
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** Bucket key + display label for a date, at day or month granularity. */
+function bucketFor(d: Date, unit: "day" | "month"): { key: string; label: string } {
+  if (unit === "month") {
+    return {
+      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      label: new Intl.DateTimeFormat("en-US", { month: "short" }).format(d),
+    };
+  }
+  return {
+    key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+    label: new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(d),
+  };
+}
+
+/**
+ * Entry trend for a team's giveaways, bucketed by day (week/month view) or
+ * month (year view), broken down per giveaway — the top {@link MAX_SERIES} by
+ * volume get their own series, the rest fold into "Other" so the chart never
+ * gets a rainbow of 20 thin slivers.
+ *
+ * Counts COMPLETED entries by `submittedAt` (a real, valid entry) — pending/
+ * abandoned attempts never counted as an entry anywhere else in the app, so
+ * they're excluded here too.
+ */
+export async function getTeamEntryStats(
+  teamId: string,
+  range: EntryStatsRange
+): Promise<TeamEntryStats> {
+  const now = new Date();
+  const unit: "day" | "month" = range === "year" ? "month" : "day";
+  const start = rangeStart(range, now);
+
+  const [entries, totalAllTime] = await Promise.all([
+    db.entry.findMany({
+      where: { giveaway: { teamId }, status: "COMPLETED", submittedAt: { gte: start } },
+      select: { submittedAt: true, giveawayId: true, giveaway: { select: { title: true } } },
+    }),
+    db.entry.count({ where: { giveaway: { teamId }, status: "COMPLETED" } }),
+  ]);
+
+  // Rank giveaways by entries within the range to pick the top series.
+  const totalsByGiveaway = new Map<string, { title: string; total: number }>();
+  for (const e of entries) {
+    const cur = totalsByGiveaway.get(e.giveawayId) ?? { title: e.giveaway.title, total: 0 };
+    cur.total += 1;
+    totalsByGiveaway.set(e.giveawayId, cur);
+  }
+  const ranked = [...totalsByGiveaway.entries()].sort((a, b) => b[1].total - a[1].total);
+  const topIds = new Set(ranked.slice(0, MAX_SERIES).map(([id]) => id));
+  const hasOther = ranked.length > MAX_SERIES;
+
+  const series: EntryStatsSeries[] = ranked
+    .filter(([id]) => topIds.has(id))
+    .map(([id, v]) => ({ key: id, title: v.title, total: v.total }));
+  if (hasOther) {
+    const otherTotal = ranked
+      .filter(([id]) => !topIds.has(id))
+      .reduce((sum, [, v]) => sum + v.total, 0);
+    series.push({ key: "other", title: "Other giveaways", total: otherTotal });
+  }
+
+  // Pre-seed every bucket in the window (so quiet days show as 0, not a gap).
+  const bucketOrder: string[] = [];
+  const bucketLabel = new Map<string, string>();
+  const cursor = new Date(start);
+  while (cursor <= now) {
+    const { key, label } = bucketFor(cursor, unit);
+    if (!bucketLabel.has(key)) {
+      bucketLabel.set(key, label);
+      bucketOrder.push(key);
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const pointMap = new Map<string, Record<string, number>>();
+  for (const key of bucketOrder) pointMap.set(key, {});
+
+  for (const e of entries) {
+    if (!e.submittedAt) continue;
+    const { key: bucketKey } = bucketFor(e.submittedAt, unit);
+    const values = pointMap.get(bucketKey);
+    if (!values) continue; // outside the pre-seeded window (shouldn't happen)
+    const seriesKey = topIds.has(e.giveawayId) ? e.giveawayId : "other";
+    values[seriesKey] = (values[seriesKey] ?? 0) + 1;
+  }
+
+  const points: EntryStatsPoint[] = bucketOrder.map((key) => ({
+    bucket: bucketLabel.get(key)!,
+    values: pointMap.get(key) ?? {},
+  }));
+
+  const totalInRange = entries.length;
+  const topGiveaway = ranked.length > 0 ? { title: ranked[0]![1].title, total: ranked[0]![1].total } : null;
+
+  return { range, series, points, totalAllTime, totalInRange, topGiveaway };
+}
+
 export type AuditLogEntry = {
   id: string;
   action: string;
