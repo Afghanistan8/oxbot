@@ -5,6 +5,7 @@ import { getTeamsForUser } from "@/server/queries/teams";
 import { Logo } from "@/components/brand/logo";
 import { UserMenu } from "@/components/brand/user-menu";
 import { DashboardNav } from "@/components/dashboard/dashboard-nav";
+import { DashboardMobileNav } from "@/components/dashboard/dashboard-mobile-nav";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -25,6 +26,7 @@ export default async function DashboardLayout({
       <header className="sticky top-0 z-40 border-b border-border/60 bg-ink-black/70 backdrop-blur-xl">
         <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex items-center gap-3">
+            <DashboardMobileNav teams={teams} />
             <Logo />
             <span className="hidden rounded-md border border-border/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:inline">
               Studio

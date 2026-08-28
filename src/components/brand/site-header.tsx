@@ -5,6 +5,7 @@ import { getPrimaryTeamSlug } from "@/server/queries/teams";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/brand/user-menu";
+import { SiteHeaderMobileMenu } from "@/components/brand/site-header-mobile-menu";
 
 /**
  * SiteHeader — the public top navigation. Sticky, glassy, with the crimson
@@ -20,7 +21,8 @@ export async function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-ink-black/70 backdrop-blur-xl">
       <div className="container grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-4">
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
+          <SiteHeaderMobileMenu />
           <Logo />
         </div>
 
