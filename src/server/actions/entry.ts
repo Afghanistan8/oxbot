@@ -111,6 +111,16 @@ export async function submitEntryAction(
     }
     const submission = parsed.data;
 
+    // Requirement ids the entrant actually opened the X link for (recorded
+    // client-side). A required follow/like/repost only counts once its link was
+    // clicked — no more entering an X task without ever visiting X.
+    const openedTasks = new Set(
+      String(formData.get("openedTasks") ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    );
+
     // --- Evaluate non-CODE requirements (network I/O, outside the tx) --------
     const accounts = await getConnectedAccounts(userId);
     const pass = new Map<string, { ok: boolean; detail?: string }>();
@@ -125,8 +135,20 @@ export async function submitEntryAction(
         accounts,
         giveaway.discordServerId
       );
-      pass.set(req.id, { ok: check.ok, detail: check.detail });
-      if (check.mocked) mockedTypes.push(req.type);
+
+      let ok = check.ok;
+      let detail = check.detail;
+      // Click-gate: an otherwise-passing required X task doesn't count until the
+      // entrant has opened its link. Leaves genuine failures (misconfigured,
+      // "not following") untouched — only stops a pass from being handed out
+      // for free.
+      if (ok && req.required && req.type.startsWith("TWITTER_") && !openedTasks.has(req.id)) {
+        ok = false;
+        detail = "Open the X link first, then submit to verify.";
+      }
+
+      pass.set(req.id, { ok, detail });
+      if (check.mocked && ok) mockedTypes.push(req.type);
     }
 
     // --- CODE requirement: read-only pre-validation --------------------------

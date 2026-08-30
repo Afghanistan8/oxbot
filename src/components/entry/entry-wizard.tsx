@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo } from "react";
+import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import type { GiveawayType, RequirementType } from "@prisma/client";
 import {
@@ -120,6 +120,19 @@ export function EntryWizard(props: EntryWizardProps) {
   );
   const [state, formAction, pending] = useActionState(action, initial);
 
+  // Click-gate for X tasks: the entrant must actually open the X link (follow /
+  // like / repost) before they can enter — no more "I clicked done" without
+  // ever visiting X. Tracked here and mirrored server-side.
+  const [openedTasks, setOpenedTasks] = useState<Set<string>>(new Set());
+  function markOpened(reqId: string) {
+    setOpenedTasks((prev) => {
+      if (prev.has(reqId)) return prev;
+      const next = new Set(prev);
+      next.add(reqId);
+      return next;
+    });
+  }
+
   // Fresh per-requirement results from the latest submission (override stored).
   const submittedById = useMemo(() => {
     const m = new Map<string, { ok: boolean; detail?: string }>();
@@ -148,6 +161,19 @@ export function EntryWizard(props: EntryWizardProps) {
   const needsCode = types.has("CODE");
   const needsEmail = types.has("EMAIL") && !hasAccountEmail;
   const hasWallet = types.has("WALLET");
+
+  // Required X tasks that have a real link to open — these are gated on the
+  // entrant actually clicking through to X before they can enter.
+  const xGateReqIds = requirements
+    .filter(
+      (r) =>
+        r.required &&
+        r.type.startsWith("TWITTER_") &&
+        Boolean(taskLink(r, xAccount, discordInvite))
+    )
+    .map((r) => r.id);
+  const allXTasksOpened = xGateReqIds.every((id) => openedTasks.has(id));
+  const blockedByXGate = !alreadyEntered && !allXTasksOpened;
 
   // Nudge signed-in entrants to save a wallet on their profile when this
   // giveaway doesn't collect one at entry — so their prize wallet is on file
@@ -260,6 +286,9 @@ export function EntryWizard(props: EntryWizardProps) {
               {...statusFor(req)}
               xAccount={xAccount}
               discordInvite={discordInvite}
+              gated={xGateReqIds.includes(req.id)}
+              opened={openedTasks.has(req.id)}
+              onOpen={() => markOpened(req.id)}
             />
           ))}
           {requirements.length === 0 && (
@@ -320,7 +349,22 @@ export function EntryWizard(props: EntryWizardProps) {
             and the server auto-passes; a real widget populates it in production. */}
         {types.has("CAPTCHA") && <input type="hidden" name="captchaToken" value="" />}
 
-        <Button type="submit" size="lg" className="w-full" disabled={pending}>
+        {/* Which X tasks the entrant actually opened — the server won't count a
+            follow/like/repost that was never clicked through. */}
+        <input type="hidden" name="openedTasks" value={[...openedTasks].join(",")} />
+
+        {blockedByXGate && (
+          <p className="text-center text-xs text-amber-300">
+            Tap “Open profile / post” on each X task above before you can enter.
+          </p>
+        )}
+
+        <Button
+          type="submit"
+          size="lg"
+          className="w-full"
+          disabled={pending || blockedByXGate}
+        >
           {pending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
@@ -376,12 +420,20 @@ function TaskRow({
   detail,
   xAccount,
   discordInvite,
+  gated = false,
+  opened = false,
+  onOpen,
 }: {
   req: PublicRequirement;
   status: RowStatus;
   detail?: string;
   xAccount: string | null;
   discordInvite: string | null;
+  /** True for X tasks that must be opened before entry is allowed. */
+  gated?: boolean;
+  /** True once the entrant has clicked this task's link. */
+  opened?: boolean;
+  onOpen?: () => void;
 }) {
   const meta = REQUIREMENT_META[req.type];
   const Icon = REQ_ICONS[req.type];
@@ -427,10 +479,21 @@ function TaskRow({
             href={link}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={onOpen}
             className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-scarlet-soft hover:text-white"
           >
             {taskCta(req.type)} <ExternalLink className="h-3 w-3" />
           </a>
+        )}
+        {gated && (
+          <p
+            className={cn(
+              "mt-1 text-[11px] font-medium",
+              opened ? "text-emerald-400" : "text-amber-300"
+            )}
+          >
+            {opened ? "✓ Opened — you can enter now" : "Required: open the link above first"}
+          </p>
         )}
       </div>
       <StatusIcon className={cn("mt-0.5 h-5 w-5 shrink-0", statusColor)} />
