@@ -27,6 +27,7 @@ export const CHAIN_META: Record<
   BITCOIN: { label: "Bitcoin (Ordinals)", short: "BTC", color: "#F7931A", tokenSymbol: "BTC" },
   SUI: { label: "Sui", short: "SUI", color: "#4DA2FF", tokenSymbol: "SUI" },
   POLYGON: { label: "Polygon", short: "POLY", color: "#8247E5", tokenSymbol: "MATIC" },
+  HYPERLIQUID: { label: "Hyperliquid", short: "HYPE", color: "#50D2C1", tokenSymbol: "HYPE" },
   OTHER: { label: "Other", short: "—", color: "#9CA3AF", tokenSymbol: "" },
 };
 
@@ -39,6 +40,7 @@ export const ALL_CHAINS: Blockchain[] = [
   "BITCOIN",
   "SUI",
   "POLYGON",
+  "HYPERLIQUID",
   "OTHER",
 ];
 
@@ -187,6 +189,7 @@ export const PROFILE_WALLET_CHAINS = [
   "ROBINHOOD",
   "BASE",
   "ARBITRUM",
+  "HYPERLIQUID",
 ] as const satisfies readonly Blockchain[];
 
 /** One address per chain, keyed by chain — empty string when none is set. */

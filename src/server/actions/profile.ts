@@ -25,13 +25,15 @@ const addressField = z
   .optional()
   .or(z.literal(""));
 
-const walletsSchema = z.object({
-  SOLANA: addressField,
-  ETHEREUM: addressField,
-  ROBINHOOD: addressField,
-  BASE: addressField,
-  ARBITRUM: addressField,
-});
+// One optional address field per profile wallet chain, built straight from
+// PROFILE_WALLET_CHAINS so adding a chain there is the ONLY change ever needed
+// — no per-chain lines here to drift out of sync.
+const walletsSchema = z.object(
+  Object.fromEntries(PROFILE_WALLET_CHAINS.map((c) => [c, addressField])) as Record<
+    (typeof PROFILE_WALLET_CHAINS)[number],
+    typeof addressField
+  >
+);
 
 export async function saveWalletsAction(
   _prev: ActionState,
@@ -43,13 +45,11 @@ export async function saveWalletsAction(
     const rl = rateLimit(`wallet:${userId}`, RATE_LIMITS.mutate.limit, RATE_LIMITS.mutate.windowMs);
     if (!rl.success) return fail("Too many attempts. Please slow down.");
 
-    const parsed = walletsSchema.safeParse({
-      SOLANA: formData.get("wallet_SOLANA") ?? "",
-      ETHEREUM: formData.get("wallet_ETHEREUM") ?? "",
-      ROBINHOOD: formData.get("wallet_ROBINHOOD") ?? "",
-      BASE: formData.get("wallet_BASE") ?? "",
-      ARBITRUM: formData.get("wallet_ARBITRUM") ?? "",
-    });
+    const parsed = walletsSchema.safeParse(
+      Object.fromEntries(
+        PROFILE_WALLET_CHAINS.map((c) => [c, formData.get(`wallet_${c}`) ?? ""])
+      )
+    );
     if (!parsed.success) {
       return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
     }

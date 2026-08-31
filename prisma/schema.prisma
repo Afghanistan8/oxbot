@@ -58,6 +58,7 @@ enum Blockchain {
   BITCOIN
   SUI
   POLYGON
+  HYPERLIQUID
   OTHER
 }
 

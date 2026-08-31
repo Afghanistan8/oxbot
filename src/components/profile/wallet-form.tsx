@@ -18,6 +18,7 @@ const PLACEHOLDER: Record<string, string> = {
   ROBINHOOD: "0x…",
   BASE: "0x…",
   ARBITRUM: "0x…",
+  HYPERLIQUID: "0x…",
 };
 
 /**
