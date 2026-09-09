@@ -19,6 +19,7 @@ const PLACEHOLDER: Record<string, string> = {
   BASE: "0x…",
   ARBITRUM: "0x…",
   HYPERLIQUID: "0x…",
+  ARCH: "Your Arch address",
 };
 
 /**

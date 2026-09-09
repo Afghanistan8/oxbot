@@ -59,6 +59,7 @@ enum Blockchain {
   SUI
   POLYGON
   HYPERLIQUID
+  ARCH
   OTHER
 }
 
