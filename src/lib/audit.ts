@@ -32,7 +32,31 @@ export type AuditAction =
   | "winners.draw"
   | "winners.reroll"
   | "winners.finalize"
-  | "entry.disqualify";
+  | "entry.disqualify"
+  // OxFoxes Collab
+  | "listing.create"
+  | "listing.update"
+  | "listing.publish"
+  | "listing.pause"
+  | "listing.resume"
+  | "listing.close"
+  | "listing.cancel"
+  | "listing.raffle_open"
+  | "criteria_template.save"
+  | "criteria_template.delete"
+  | "request.submit"
+  | "request.auto_approve"
+  | "request.approve"
+  | "request.reject"
+  | "request.needs_info"
+  | "request.waitlist"
+  | "request.reply"
+  | "request.cancel"
+  | "partner_raffle.draw"
+  | "allocation.wallets"
+  | "allocation.confirm"
+  | "allocation.deliver"
+  | "allocation.revoke";
 
 export type AuditInput = {
   teamId: string;

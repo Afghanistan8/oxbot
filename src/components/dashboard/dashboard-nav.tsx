@@ -12,6 +12,7 @@ import {
   Check,
   BookOpen,
   ChartBar,
+  Handshake,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -42,6 +43,7 @@ export function DashboardNav({ teams }: { teams: TeamListItem[] }) {
     ? [
         { href: base, label: "Overview", icon: LayoutDashboard, exact: true },
         { href: `${base}/giveaways`, label: "Giveaways", icon: Gift },
+        { href: `${base}/collab`, label: "Collab", icon: Handshake },
         { href: `${base}/analytics`, label: "Analytics", icon: ChartBar },
         { href: `${base}/members`, label: "Members", icon: Users },
         { href: `${base}/settings`, label: "Settings", icon: Settings },

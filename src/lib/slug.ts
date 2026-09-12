@@ -32,6 +32,18 @@ export async function uniqueGiveawaySlug(base: string): Promise<string> {
   });
 }
 
+/** Ensure a Collab listing slug is unique, appending a short suffix on collision. */
+export async function uniqueListingSlug(base: string): Promise<string> {
+  const root = slugify(base) || "listing";
+  return ensureUnique(root, async (slug) => {
+    const existing = await db.whitelistListing.findUnique({
+      where: { slug },
+      select: { id: true },
+    });
+    return existing === null;
+  });
+}
+
 /**
  * Try `root`, then `root-<rand>` until `isFree` returns true. Bounded attempts
  * then falls back to a guaranteed-unique random token.

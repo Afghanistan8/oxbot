@@ -18,6 +18,14 @@ import {
   RefreshCw,
   ShieldCheck,
   Activity,
+  Layers,
+  ListChecks,
+  Handshake,
+  Zap,
+  MessageSquare,
+  Hourglass,
+  Wallet,
+  PackageCheck,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -53,6 +61,30 @@ const ACTION_META: Record<string, ActionMeta> = {
   "winners.reroll": { label: "re-rolled winners", icon: RefreshCw, tone: "text-gold" },
   "winners.finalize": { label: "finalized winners", icon: ShieldCheck, tone: "text-gold" },
   "entry.disqualify": { label: "moderated an entry", icon: UserCheck, tone: "text-muted-foreground" },
+  // OxFoxes Collab
+  "listing.create": { label: "created a Collab listing", icon: Layers, tone: "text-scarlet-soft" },
+  "listing.update": { label: "edited a Collab listing", icon: Pencil, tone: "text-muted-foreground" },
+  "listing.publish": { label: "opened a Collab listing", icon: Rocket, tone: "text-emerald-400" },
+  "listing.pause": { label: "paused a Collab listing", icon: Square, tone: "text-muted-foreground" },
+  "listing.resume": { label: "resumed a Collab listing", icon: Rocket, tone: "text-emerald-400" },
+  "listing.close": { label: "closed a Collab listing", icon: Square, tone: "text-muted-foreground" },
+  "listing.cancel": { label: "cancelled a Collab listing", icon: Ban, tone: "text-destructive" },
+  "listing.raffle_open": { label: "opened a public WL raffle", icon: Gift, tone: "text-scarlet-soft" },
+  "criteria_template.save": { label: "saved a criteria template", icon: ListChecks, tone: "text-muted-foreground" },
+  "criteria_template.delete": { label: "deleted a criteria template", icon: Trash2, tone: "text-muted-foreground" },
+  "request.submit": { label: "filed a whitelist request", icon: Handshake, tone: "text-scarlet-soft" },
+  "request.auto_approve": { label: "auto-approved an FCFS request", icon: Zap, tone: "text-emerald-400" },
+  "request.approve": { label: "approved a whitelist request", icon: Handshake, tone: "text-emerald-400" },
+  "request.reject": { label: "rejected a whitelist request", icon: Ban, tone: "text-destructive" },
+  "request.needs_info": { label: "asked a requester for info", icon: MessageSquare, tone: "text-amber-300" },
+  "request.waitlist": { label: "waitlisted a request", icon: Hourglass, tone: "text-muted-foreground" },
+  "request.reply": { label: "replied to a review", icon: MessageSquare, tone: "text-muted-foreground" },
+  "request.cancel": { label: "withdrew a whitelist request", icon: Ban, tone: "text-muted-foreground" },
+  "partner_raffle.draw": { label: "drew the partner raffle", icon: Trophy, tone: "text-gold" },
+  "allocation.wallets": { label: "submitted delivery wallets", icon: Wallet, tone: "text-scarlet-soft" },
+  "allocation.confirm": { label: "confirmed an allocation", icon: ShieldCheck, tone: "text-emerald-400" },
+  "allocation.deliver": { label: "delivered an allocation", icon: PackageCheck, tone: "text-emerald-400" },
+  "allocation.revoke": { label: "revoked an allocation", icon: Ban, tone: "text-destructive" },
 };
 
 const FALLBACK: ActionMeta = {

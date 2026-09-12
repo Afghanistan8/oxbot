@@ -58,3 +58,8 @@ export function collabEntryUrl(path = "/"): string {
   const protocol = /localhost|127\.0\.0\.1/.test(host) ? "http" : "https";
   return `${protocol}://${host}${path === "/" ? "" : path}`;
 }
+
+/** Absolute, shareable Collab URL (copy-link buttons, webhooks, emails). */
+export function collabShareUrl(path = "/"): string {
+  return absoluteUrl(collabEntryUrl(path));
+}
