@@ -85,6 +85,7 @@ const ACTION_META: Record<string, ActionMeta> = {
   "allocation.confirm": { label: "confirmed an allocation", icon: ShieldCheck, tone: "text-emerald-400" },
   "allocation.deliver": { label: "delivered an allocation", icon: PackageCheck, tone: "text-emerald-400" },
   "allocation.revoke": { label: "revoked an allocation", icon: Ban, tone: "text-destructive" },
+  "allocation.export": { label: "exported Collab allocations", icon: PackageCheck, tone: "text-muted-foreground" },
 };
 
 const FALLBACK: ActionMeta = {

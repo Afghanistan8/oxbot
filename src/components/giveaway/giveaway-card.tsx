@@ -17,7 +17,14 @@ import { Countdown } from "@/components/giveaway/countdown";
  * Soft red border, hover glow + lift, banner with crimson sheen overlay,
  * countdown, and privacy-aware entry count.
  */
-export function GiveawayCard({ giveaway }: { giveaway: GiveawayCardData }) {
+export function GiveawayCard({
+  giveaway,
+  href,
+}: {
+  giveaway: GiveawayCardData;
+  /** Override the link target (Collab links raffles to its own page). */
+  href?: string;
+}) {
   const phase = giveawayPhase(giveaway);
   const phaseMeta = PHASE_META[phase];
   const typeMeta = GIVEAWAY_TYPE_META[giveaway.type];
@@ -34,7 +41,7 @@ export function GiveawayCard({ giveaway }: { giveaway: GiveawayCardData }) {
       className="group relative"
     >
       <Link
-        href={`/giveaways/${giveaway.slug}`}
+        href={href ?? `/giveaways/${giveaway.slug}`}
         className="block overflow-hidden rounded-2xl border border-border bg-card bg-card-glow shadow-card transition-all duration-300 group-hover:border-primary/50 group-hover:shadow-glow-red"
       >
         {/* Banner */}

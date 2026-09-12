@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { requireUserId } from "@/lib/session";
@@ -9,16 +10,32 @@ import { requireTeamRole, AuthzError } from "@/lib/authz";
 import { recordAudit } from "@/lib/audit";
 import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { uniqueListingSlug } from "@/lib/slug";
-import { InventoryError, assertCapacity, lockListing, resyncListingStatus } from "@/lib/collab/inventory";
-import { OPEN_REQUEST_STATUSES } from "@/lib/collab/constants";
 import {
+  InventoryError,
+  assertCapacity,
+  lockListing,
+  resyncListingStatus,
+  transitionAllocation,
+} from "@/lib/collab/inventory";
+import { OPEN_REQUEST_STATUSES } from "@/lib/collab/constants";
+import { criteriaFromRow, evaluateEligibility } from "@/lib/collab/eligibility";
+import { RequestRuleError, approveRequest, drawPartnerRaffle, fileRequest } from "@/lib/collab/requests";
+import { notifyRequestDecision } from "@/lib/collab/notify";
+import { generateDrawSeed } from "@/lib/giveaway/winner-selection";
+import { getTeamPlatformFacts } from "@/server/queries/collab";
+import {
+  allocationWalletsSchema,
   criteriaTemplateSchema,
   listingFormSchema,
+  parseWalletLines,
+  requestFormSchema,
+  requesterReplySchema,
+  reviewDecisionSchema,
   type CriteriaFormInput,
   type ListingFormInput,
 } from "@/lib/validation/collab";
 import { ActionState, ok, fail, runAction, zodFieldErrors } from "./_result";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, RequestStatus } from "@prisma/client";
 
 /**
  * OxFoxes Collab server actions.
@@ -430,5 +447,538 @@ export async function deleteCriteriaTemplateAction(templateId: string): Promise<
 
     revalidatePath(`/dashboard/${template.templateTeam?.slug}/collab/criteria`);
     return ok(undefined, "Template deleted.");
+  });
+}
+
+// --- Partner requests: file ---------------------------------------------------
+
+export type SubmitRequestResult = {
+  requestId: string;
+  status: RequestStatus;
+  spotsGranted: number | null;
+  teamSlug: string;
+};
+
+export async function submitRequestAction(
+  listingId: string,
+  _prev: unknown,
+  formData: FormData
+): Promise<ActionState<SubmitRequestResult>> {
+  const userId = await requireUserId();
+
+  return runAction<SubmitRequestResult>(async () => {
+    const rl = rateLimit(`collab-request:${userId}`, 6, 60_000);
+    if (!rl.success) return fail(`Too many requests. Try again in ${rl.retryAfter}s.`);
+
+    const parsed = requestFormSchema.safeParse({
+      requesterTeamId: formData.get("requesterTeamId"),
+      spotsRequested: formData.get("spotsRequested"),
+      pitch: formData.get("pitch"),
+      audienceSummary: formData.get("audienceSummary") || "",
+      communitySize: formData.get("communitySize"),
+      holderCount: formData.get("holderCount"),
+      twitterFollowers: formData.get("twitterFollowers"),
+      discordMembers: formData.get("discordMembers"),
+      requesterChains: formData.getAll("requesterChains").map(String),
+      requesterAssetType: formData.get("requesterAssetType") || null,
+      evidenceLinks: formData.getAll("evidenceLinks").map(String).filter((s) => s.trim()),
+      attestations: formData.getAll("attestations").map(String),
+      walletForDelivery: formData.get("walletForDelivery") || "",
+      deliveryChain: formData.get("deliveryChain") || "",
+    });
+    if (!parsed.success) return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
+    const data = parsed.data;
+
+    await requireTeamRole(userId, data.requesterTeamId, "EDITOR");
+
+    const listing = await db.whitelistListing.findUnique({
+      where: { id: listingId },
+      include: { criteria: true, team: { select: { id: true, slug: true, name: true } } },
+    });
+    if (!listing || listing.status === "DRAFT") return fail("Listing not found.");
+
+    // Only rules the listing actually defines can be attested.
+    const criteria = criteriaFromRow(listing.criteria);
+    const ruleIds = new Set(criteria?.customRules.map((r) => r.id) ?? []);
+    const attestations: Record<string, boolean> = {};
+    for (const id of data.attestations) if (ruleIds.has(id)) attestations[id] = true;
+
+    const facts = (await getTeamPlatformFacts([data.requesterTeamId])).get(data.requesterTeamId) ?? {
+      raffleEntries: 0,
+      verifiedTeam: false,
+    };
+    const eligibility = evaluateEligibility(criteria, {
+      communitySize: data.communitySize,
+      holderCount: data.holderCount,
+      twitterFollowers: data.twitterFollowers,
+      discordMembers: data.discordMembers,
+      raffleEntries: facts.raffleEntries,
+      chains: data.requesterChains,
+      assetType: data.requesterAssetType,
+      verifiedTeam: facts.verifiedTeam,
+      attestations,
+    });
+
+    let outcome;
+    try {
+      outcome = await fileRequest(db, {
+        listingId,
+        requesterTeamId: data.requesterTeamId,
+        submittedById: userId,
+        spotsRequested: data.spotsRequested,
+        pitch: data.pitch,
+        audienceSummary: data.audienceSummary || null,
+        communitySize: data.communitySize,
+        holderCount: data.holderCount,
+        twitterFollowers: data.twitterFollowers,
+        discordMembers: data.discordMembers,
+        requesterChains: data.requesterChains,
+        requesterAssetType: data.requesterAssetType,
+        evidence: { links: data.evidenceLinks, attestations },
+        walletForDelivery: data.walletForDelivery || null,
+        deliveryChain: data.deliveryChain || null,
+        eligibility,
+      });
+    } catch (err) {
+      if (err instanceof RequestRuleError || err instanceof InventoryError) return fail(err.message);
+      throw err;
+    }
+
+    const requester = await db.team.findUniqueOrThrow({
+      where: { id: data.requesterTeamId },
+      select: { slug: true, name: true, discordWebhookUrl: true },
+    });
+    const meta = {
+      listing: listing.title,
+      requester: requester.name,
+      spotsRequested: data.spotsRequested,
+      status: outcome.request.status,
+      eligible: eligibility.eligible,
+      score: eligibility.score,
+    };
+    await Promise.all([
+      recordAudit({ teamId: data.requesterTeamId, actorId: userId, action: "request.submit", target: outcome.request.id, meta }),
+      recordAudit({
+        teamId: listing.teamId,
+        actorId: userId,
+        action: outcome.autoApproved ? "request.auto_approve" : "request.submit",
+        target: outcome.request.id,
+        meta: { ...meta, allocationId: outcome.allocationId },
+      }),
+    ]);
+
+    if (outcome.autoApproved) {
+      const submitter = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
+      await notifyRequestDecision({
+        decision: "approved",
+        to: submitter?.email ?? null,
+        requesterTeam: requester,
+        listingTeam: listing.team,
+        listing,
+        spotsGranted: outcome.request.spotsGranted,
+      });
+    }
+
+    revalidateListing(listing.team.slug, listing);
+    revalidatePath(`/dashboard/${requester.slug}/collab`, "layout");
+
+    const messages: Partial<Record<RequestStatus, string>> = {
+      APPROVED: `Approved instantly — ${outcome.request.spotsGranted} spots are yours. Submit delivery wallets from your desk.`,
+      WAITLISTED: "No partner spots left right now — you're on the waitlist.",
+      UNDER_REVIEW: "Request filed. You meet the criteria — it's in their review queue.",
+      SUBMITTED: eligibility.eligible
+        ? "Request filed."
+        : "Request filed, but it's flagged as below this listing's criteria.",
+    };
+    return ok(
+      {
+        requestId: outcome.request.id,
+        status: outcome.request.status,
+        spotsGranted: outcome.request.spotsGranted,
+        teamSlug: requester.slug,
+      },
+      messages[outcome.request.status] ?? "Request filed."
+    );
+  });
+}
+
+// --- Partner requests: review (listing team) ---------------------------------
+
+async function loadRequestForListingTeam(requestId: string, userId: string) {
+  const request = await db.collabRequest.findUnique({
+    where: { id: requestId },
+    include: {
+      listing: { include: { team: { select: { id: true, slug: true, name: true } } } },
+      requesterTeam: { select: { id: true, slug: true, name: true, discordWebhookUrl: true } },
+      submittedBy: { select: { email: true } },
+    },
+  });
+  if (!request) throw new AuthzError("Request not found.", "NOT_FOUND");
+  await requireTeamRole(userId, request.listing.teamId, "EDITOR");
+  return request;
+}
+
+export async function reviewRequestAction(
+  requestId: string,
+  _prev: unknown,
+  formData: FormData
+): Promise<ActionState> {
+  const userId = await requireUserId();
+
+  return runAction(async () => {
+    checkMutateLimit(userId);
+    const request = await loadRequestForListingTeam(requestId, userId);
+
+    const parsed = reviewDecisionSchema.safeParse({
+      decision: formData.get("decision"),
+      spotsGranted: formData.get("spotsGranted") ?? undefined,
+      note: formData.get("note") || "",
+    });
+    if (!parsed.success) return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
+    const decision = parsed.data;
+    const note = decision.note || null;
+
+    if (!OPEN_REQUEST_STATUSES.includes(request.status)) {
+      return fail("This request has already been decided.");
+    }
+
+    const { listing } = request;
+    if (decision.decision === "approve") {
+      try {
+        const result = await approveRequest(db, {
+          requestId,
+          spotsGranted: decision.spotsGranted,
+          reviewerId: userId,
+          note,
+        });
+        await recordAudit({
+          teamId: listing.teamId,
+          actorId: userId,
+          action: "request.approve",
+          target: requestId,
+          meta: {
+            requester: request.requesterTeam.name,
+            spotsRequested: request.spotsRequested,
+            spotsGranted: decision.spotsGranted,
+            partial: result.request.status === "PARTIALLY_APPROVED",
+            allocationId: result.allocationId,
+          },
+        });
+      } catch (err) {
+        if (err instanceof RequestRuleError || err instanceof InventoryError) {
+          return fail(err.message, { spotsGranted: [err.message] });
+        }
+        throw err;
+      }
+    } else {
+      const status: RequestStatus =
+        decision.decision === "reject" ? "REJECTED" : decision.decision === "needs_info" ? "NEEDS_INFO" : "WAITLISTED";
+      const claimed = await db.collabRequest.updateMany({
+        where: { id: requestId, status: { in: OPEN_REQUEST_STATUSES } },
+        data: { status, reviewerNote: note, reviewedById: userId, reviewedAt: new Date() },
+      });
+      if (claimed.count === 0) return fail("This request has already been decided.");
+      await recordAudit({
+        teamId: listing.teamId,
+        actorId: userId,
+        action: decision.decision === "reject" ? "request.reject" : decision.decision === "needs_info" ? "request.needs_info" : "request.waitlist",
+        target: requestId,
+        meta: { requester: request.requesterTeam.name, note },
+      });
+    }
+
+    await notifyRequestDecision({
+      decision:
+        decision.decision === "approve"
+          ? "approved"
+          : decision.decision === "reject"
+            ? "rejected"
+            : decision.decision === "needs_info"
+              ? "needs_info"
+              : "waitlisted",
+      to: request.submittedBy?.email ?? null,
+      requesterTeam: request.requesterTeam,
+      listingTeam: listing.team,
+      listing,
+      spotsGranted: decision.decision === "approve" ? decision.spotsGranted : null,
+      note,
+    });
+
+    revalidateListing(listing.team.slug, listing);
+    revalidatePath(`/dashboard/${request.requesterTeam.slug}/collab`, "layout");
+
+    const messages = {
+      approve: "Approved — spots reserved for the partner.",
+      reject: "Request rejected.",
+      needs_info: "Asked the requester for more info.",
+      waitlist: "Request waitlisted.",
+    } as const;
+    return ok(undefined, messages[decision.decision]);
+  });
+}
+
+/** RAFFLE listings: draw qualified requester teams with a stored CSPRNG seed. */
+export async function drawPartnerRaffleAction(listingId: string): Promise<ActionState<{ winners: number }>> {
+  const userId = await requireUserId();
+
+  return runAction<{ winners: number }>(async () => {
+    checkMutateLimit(userId);
+    const listing = await db.whitelistListing.findUnique({
+      where: { id: listingId },
+      include: { team: { select: { id: true, slug: true, name: true } } },
+    });
+    if (!listing) return fail("Listing not found.");
+    await requireTeamRole(userId, listing.teamId, "EDITOR");
+
+    const seed = generateDrawSeed();
+    let result;
+    try {
+      result = await drawPartnerRaffle(db, { listingId, seed, reviewerId: userId });
+    } catch (err) {
+      if (err instanceof RequestRuleError || err instanceof InventoryError) return fail(err.message);
+      throw err;
+    }
+
+    await recordAudit({
+      teamId: listing.teamId,
+      actorId: userId,
+      action: "partner_raffle.draw",
+      target: listingId,
+      meta: {
+        seed,
+        winners: result.winners.length,
+        spots: result.winners.reduce((n, w) => n + w.spots, 0),
+        waitlisted: result.waitlisted,
+        expired: result.expired,
+      },
+    });
+
+    if (result.winners.length) {
+      const requests = await db.collabRequest.findMany({
+        where: { id: { in: result.winners.map((w) => w.requestId) } },
+        include: {
+          requesterTeam: { select: { slug: true, name: true, discordWebhookUrl: true } },
+          submittedBy: { select: { email: true } },
+        },
+      });
+      await Promise.all(
+        requests.map((r) =>
+          notifyRequestDecision({
+            decision: "raffle_won",
+            to: r.submittedBy?.email ?? null,
+            requesterTeam: r.requesterTeam,
+            listingTeam: listing.team,
+            listing,
+            spotsGranted: r.spotsGranted,
+          })
+        )
+      );
+    }
+
+    revalidateListing(listing.team.slug, listing);
+    const n = result.winners.length;
+    return ok(
+      { winners: n },
+      n === 0 ? "Drawn — no qualified requests could be allocated." : `Drew ${n} partner${n === 1 ? "" : "s"}. The listing is now closed.`
+    );
+  });
+}
+
+// --- Partner requests: requester side ----------------------------------------
+
+async function loadRequestForRequesterTeam(requestId: string, userId: string) {
+  const request = await db.collabRequest.findUnique({
+    where: { id: requestId },
+    include: {
+      listing: { include: { team: { select: { id: true, slug: true, name: true } } } },
+      requesterTeam: { select: { id: true, slug: true, name: true } },
+      allocation: true,
+    },
+  });
+  if (!request) throw new AuthzError("Request not found.", "NOT_FOUND");
+  await requireTeamRole(userId, request.requesterTeamId, "EDITOR");
+  return request;
+}
+
+export async function replyToRequestAction(
+  requestId: string,
+  _prev: unknown,
+  formData: FormData
+): Promise<ActionState> {
+  const userId = await requireUserId();
+  return runAction(async () => {
+    checkMutateLimit(userId);
+    const request = await loadRequestForRequesterTeam(requestId, userId);
+    const parsed = requesterReplySchema.safeParse({ reply: formData.get("reply") });
+    if (!parsed.success) return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
+
+    const claimed = await db.collabRequest.updateMany({
+      where: { id: requestId, status: "NEEDS_INFO" },
+      data: {
+        requesterReply: parsed.data.reply,
+        status: request.eligible && request.listing.distributionMethod === "CRITERIA" ? "UNDER_REVIEW" : "SUBMITTED",
+      },
+    });
+    if (claimed.count === 0) return fail("This request isn't waiting on a reply.");
+
+    await Promise.all([
+      recordAudit({ teamId: request.requesterTeamId, actorId: userId, action: "request.reply", target: requestId }),
+      recordAudit({ teamId: request.listing.teamId, actorId: userId, action: "request.reply", target: requestId, meta: { requester: request.requesterTeam.name } }),
+    ]);
+    revalidatePath(`/dashboard/${request.requesterTeam.slug}/collab`, "layout");
+    revalidatePath(`/dashboard/${request.listing.team.slug}/collab`, "layout");
+    return ok(undefined, "Reply sent — your request is back in their queue.");
+  });
+}
+
+/**
+ * Withdraw a request. An approved request whose spots are still only RESERVED
+ * can be declined too — the spots return to the listing's inventory.
+ */
+export async function cancelRequestAction(requestId: string): Promise<ActionState> {
+  const userId = await requireUserId();
+  return runAction(async () => {
+    checkMutateLimit(userId);
+    const request = await loadRequestForRequesterTeam(requestId, userId);
+
+    const isOpen = OPEN_REQUEST_STATUSES.includes(request.status);
+    const declinable =
+      (request.status === "APPROVED" || request.status === "PARTIALLY_APPROVED") &&
+      request.allocation?.status === "RESERVED";
+    if (!isOpen && !declinable) {
+      return fail(
+        request.allocation && request.allocation.status !== "REVOKED"
+          ? "Confirmed spots can't be withdrawn here — ask the listing team to revoke them."
+          : "This request can't be withdrawn."
+      );
+    }
+
+    try {
+      await db.$transaction(async (tx) => {
+        const listing = await lockListing(tx, request.listingId);
+        const claimed = await tx.collabRequest.updateMany({
+          where: { id: requestId, status: request.status },
+          data: { status: "CANCELLED" },
+        });
+        if (claimed.count === 0) throw new RequestRuleError("This request just changed — refresh and try again.");
+        if (declinable && request.allocation) {
+          await transitionAllocation(tx, listing, request.allocation, "REVOKED", { note: "Declined by the partner." });
+        }
+      });
+    } catch (err) {
+      if (err instanceof RequestRuleError || err instanceof InventoryError) return fail(err.message);
+      throw err;
+    }
+
+    await Promise.all([
+      recordAudit({ teamId: request.requesterTeamId, actorId: userId, action: "request.cancel", target: requestId, meta: { declinedSpots: declinable } }),
+      recordAudit({ teamId: request.listing.teamId, actorId: userId, action: "request.cancel", target: requestId, meta: { requester: request.requesterTeam.name, declinedSpots: declinable } }),
+    ]);
+    revalidateListing(request.listing.team.slug, request.listing);
+    revalidatePath(`/dashboard/${request.requesterTeam.slug}/collab`, "layout");
+    return ok(undefined, declinable ? "Allocation declined — the spots went back to the listing." : "Request withdrawn.");
+  });
+}
+
+// --- Allocations: delivery ----------------------------------------------------
+
+/** Receiving team pastes its delivery wallets; a RESERVED allocation becomes CONFIRMED. */
+export async function submitAllocationWalletsAction(
+  allocationId: string,
+  _prev: unknown,
+  formData: FormData
+): Promise<ActionState> {
+  const userId = await requireUserId();
+  return runAction(async () => {
+    checkMutateLimit(userId);
+    const allocation = await db.collabAllocation.findUnique({
+      where: { id: allocationId },
+      include: {
+        listing: { include: { team: { select: { slug: true } } } },
+        team: { select: { slug: true, name: true } },
+      },
+    });
+    if (!allocation) return fail("Allocation not found.");
+    await requireTeamRole(userId, allocation.teamId, "EDITOR");
+    if (allocation.status === "REVOKED" || allocation.status === "DELIVERED") {
+      return fail(`This allocation is already ${allocation.status.toLowerCase()}.`);
+    }
+
+    const wallets = parseWalletLines(String(formData.get("wallets") ?? ""), allocation.listing.chain);
+    const parsed = allocationWalletsSchema.safeParse({ wallets });
+    if (!parsed.success) return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
+    if (parsed.data.wallets.length > allocation.spots) {
+      return fail(`You were granted ${allocation.spots} spots — paste at most ${allocation.spots} wallets.`, {
+        wallets: [`At most ${allocation.spots} wallets.`],
+      });
+    }
+
+    try {
+      await db.$transaction(async (tx) => {
+        const listing = await lockListing(tx, allocation.listingId);
+        const fresh = await tx.collabAllocation.findUniqueOrThrow({ where: { id: allocationId } });
+        const walletJson = parsed.data.wallets as unknown as Prisma.InputJsonValue;
+        if (fresh.status === "RESERVED") {
+          await transitionAllocation(tx, listing, fresh, "CONFIRMED", { wallets: walletJson });
+        } else if (fresh.status === "CONFIRMED") {
+          await tx.collabAllocation.update({ where: { id: allocationId }, data: { wallets: walletJson } });
+        } else {
+          throw new InventoryError(`This allocation is already ${fresh.status.toLowerCase()}.`);
+        }
+      });
+    } catch (err) {
+      if (err instanceof InventoryError) return fail(err.message);
+      throw err;
+    }
+
+    await Promise.all([
+      recordAudit({ teamId: allocation.teamId, actorId: userId, action: "allocation.wallets", target: allocationId, meta: { wallets: wallets.length } }),
+      recordAudit({ teamId: allocation.listing.teamId, actorId: userId, action: "allocation.wallets", target: allocationId, meta: { partner: allocation.team.name, wallets: wallets.length } }),
+    ]);
+    revalidatePath(`/dashboard/${allocation.team.slug}/collab`, "layout");
+    revalidatePath(`/dashboard/${allocation.listing.team.slug}/collab`, "layout");
+    return ok(undefined, `${wallets.length} wallet${wallets.length === 1 ? "" : "s"} submitted — spots confirmed.`);
+  });
+}
+
+/** Listing team moves an allocation along: confirm, mark delivered, or revoke. */
+export async function setAllocationStatusAction(
+  allocationId: string,
+  to: "CONFIRMED" | "DELIVERED" | "REVOKED"
+): Promise<ActionState> {
+  const userId = await requireUserId();
+  return runAction(async () => {
+    checkMutateLimit(userId);
+    const target = z.enum(["CONFIRMED", "DELIVERED", "REVOKED"]).parse(to);
+    const allocation = await db.collabAllocation.findUnique({
+      where: { id: allocationId },
+      include: {
+        listing: { include: { team: { select: { slug: true } } } },
+        team: { select: { slug: true, name: true } },
+      },
+    });
+    if (!allocation) return fail("Allocation not found.");
+    await requireTeamRole(userId, allocation.listing.teamId, target === "REVOKED" ? "ADMIN" : "EDITOR");
+
+    try {
+      await db.$transaction(async (tx) => {
+        const listing = await lockListing(tx, allocation.listingId);
+        const fresh = await tx.collabAllocation.findUniqueOrThrow({ where: { id: allocationId } });
+        await transitionAllocation(tx, listing, fresh, target);
+      });
+    } catch (err) {
+      if (err instanceof InventoryError) return fail(err.message);
+      throw err;
+    }
+
+    const action = target === "CONFIRMED" ? "allocation.confirm" : target === "DELIVERED" ? "allocation.deliver" : "allocation.revoke";
+    await Promise.all([
+      recordAudit({ teamId: allocation.listing.teamId, actorId: userId, action, target: allocationId, meta: { partner: allocation.team.name, spots: allocation.spots } }),
+      recordAudit({ teamId: allocation.teamId, actorId: userId, action, target: allocationId, meta: { spots: allocation.spots } }),
+    ]);
+    revalidateListing(allocation.listing.team.slug, allocation.listing);
+    revalidatePath(`/dashboard/${allocation.team.slug}/collab`, "layout");
+    const messages = { CONFIRMED: "Allocation confirmed.", DELIVERED: "Marked as delivered.", REVOKED: "Allocation revoked — spots returned to inventory." };
+    return ok(undefined, messages[target]);
   });
 }

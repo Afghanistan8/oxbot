@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { auth } from "@/lib/auth";
 import { joinCollabPath } from "@/lib/collab/host";
-import { getCollabSurface, mainSiteHref } from "@/lib/collab/surface";
+import { collabSignInHref, getCollabSurface, mainSiteHref } from "@/lib/collab/surface";
 import { getPrimaryTeamSlug } from "@/server/queries/teams";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ export async function CollabHeader() {
 
   const [deskHref, signInHref, oxbotHref] = await Promise.all([
     mainSiteHref(primaryTeamSlug ? `/dashboard/${primaryTeamSlug}/collab` : "/dashboard"),
-    mainSiteHref(`/signin?callbackUrl=${encodeURIComponent(href("/"))}`),
+    collabSignInHref("/"),
     mainSiteHref("/"),
   ]);
 

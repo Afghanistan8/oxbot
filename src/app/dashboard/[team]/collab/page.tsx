@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ArrowRight, ExternalLink, Inbox, Layers, Plus, Send, Ticket } from "lucide-react";
 
 import { resolveTeamPage } from "@/server/queries/require-team-page";
-import { getCollabOverview, getTeamListings } from "@/server/queries/collab";
+import { getCollabOverview, getIncomingRequests, getTeamListings } from "@/server/queries/collab";
+import { RequestsTable } from "@/components/collab/requests-table";
 import { collabEntryUrl } from "@/lib/collab/surface";
 import { formatNumber } from "@/lib/utils";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -24,7 +25,11 @@ export default async function CollabOverviewPage({ params }: { params: Promise<{
   const { team } = await resolveTeamPage(slug);
   const base = `/dashboard/${slug}/collab`;
 
-  const [overview, listings] = await Promise.all([getCollabOverview(team.id), getTeamListings(team.id)]);
+  const [overview, listings, incoming] = await Promise.all([
+    getCollabOverview(team.id),
+    getTeamListings(team.id),
+    getIncomingRequests(team.id, { filter: "open" }),
+  ]);
   const recentListings = listings.slice(0, 4);
 
   return (
@@ -74,6 +79,18 @@ export default async function CollabOverviewPage({ params }: { params: Promise<{
           href={`${base}/raffles`}
         />
       </div>
+
+      {incoming.length > 0 && (
+        <section className="mt-10">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-display text-xl font-semibold text-white">Waiting on you</h2>
+            <Link href={`${base}/requests`} className="inline-flex items-center gap-1 text-sm text-scarlet-soft hover:text-white">
+              Review queue <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          <RequestsTable requests={incoming.slice(0, 5)} teamSlug={slug} />
+        </section>
+      )}
 
       <section className="mt-10">
         <div className="mb-4 flex items-center justify-between">

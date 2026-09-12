@@ -49,6 +49,25 @@ export async function mainSiteHref(path: string): Promise<string> {
 }
 
 /**
+ * A sign-in callback that returns to a Collab page. Sign-in happens on the
+ * main host, so on the Collab host the callback must be absolute (the auth
+ * redirect callback trusts the Collab host).
+ */
+export async function collabCallbackUrl(path: string): Promise<string> {
+  const h = await headers();
+  if (h.get(COLLAB_HOST_HEADER) !== "1") return joinCollabPath(COLLAB_PREFIX, path);
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+  const proto = h.get("x-forwarded-proto") ?? (/localhost|127\.0\.0\.1/.test(host) ? "http" : "https");
+  return `${proto}://${host}${path}`;
+}
+
+/** Sign-in link that lands the user back on a Collab page. */
+export async function collabSignInHref(path: string): Promise<string> {
+  const callback = await collabCallbackUrl(path);
+  return mainSiteHref(`/signin?callbackUrl=${encodeURIComponent(callback)}`);
+}
+
+/**
  * Where oxbot's own chrome should send people for Collab: the dedicated host
  * when `COLLAB_HOST` is configured, else the `/collab` path fallback.
  */

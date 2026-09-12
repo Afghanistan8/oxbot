@@ -56,7 +56,8 @@ export type AuditAction =
   | "allocation.wallets"
   | "allocation.confirm"
   | "allocation.deliver"
-  | "allocation.revoke";
+  | "allocation.revoke"
+  | "allocation.export";
 
 export type AuditInput = {
   teamId: string;

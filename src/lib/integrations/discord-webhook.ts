@@ -76,3 +76,44 @@ export async function postGiveawayAnnouncement(
     return { ok: false, error: "Could not reach the Discord webhook." };
   }
 }
+
+export type CollabAnnouncement = {
+  title: string;
+  description: string;
+  url: string;
+  bannerUrl: string | null;
+  footer: string;
+};
+
+/**
+ * OxFoxes Collab embed — posted to a team's webhook when it secures a
+ * whitelist allocation. Same best-effort contract as giveaway announcements.
+ */
+export async function postCollabAnnouncement(
+  webhookUrl: string,
+  announcement: CollabAnnouncement
+): Promise<{ ok: boolean; error?: string }> {
+  const body = {
+    embeds: [
+      {
+        title: announcement.title.slice(0, 250),
+        url: announcement.url,
+        description: announcement.description.slice(0, 400),
+        color: CRIMSON,
+        image: announcement.bannerUrl ? { url: announcement.bannerUrl } : undefined,
+        footer: { text: announcement.footer },
+      },
+    ],
+  };
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return res.ok ? { ok: true } : { ok: false, error: `Discord webhook returned ${res.status}.` };
+  } catch (e) {
+    console.warn("[discord-webhook] collab announcement failed:", e);
+    return { ok: false, error: "Could not reach the Discord webhook." };
+  }
+}

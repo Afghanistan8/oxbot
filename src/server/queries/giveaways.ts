@@ -54,6 +54,8 @@ export type PublicGiveawayFilter = {
   /** When true, only include giveaways currently accepting entries. */
   liveOnly?: boolean;
   take?: number;
+  /** Only public whitelist raffles linked to an OxFoxes Collab listing. */
+  collabOnly?: boolean;
 };
 
 /**
@@ -67,12 +69,13 @@ export type PublicGiveawayFilter = {
 export async function listPublicGiveaways(
   filter: PublicGiveawayFilter = {}
 ): Promise<GiveawayCardData[]> {
-  const { chain, sort = "ending", liveOnly = false, take = 24 } = filter;
+  const { chain, sort = "ending", liveOnly = false, take = 24, collabOnly = false } = filter;
   const now = new Date();
 
   const rows = await db.giveaway.findMany({
     where: {
       visibility: { in: ["PUBLIC", "COMMUNITY"] },
+      ...(collabOnly ? { listingId: { not: null } } : {}),
       status: liveOnly
         ? "ACTIVE"
         : { in: ["ACTIVE", "SCHEDULED", "ENDED", "FINALIZED"] },

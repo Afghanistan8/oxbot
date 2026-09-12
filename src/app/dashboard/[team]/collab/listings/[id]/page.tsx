@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AssetTypeChip, MethodChip } from "@/components/collab/collab-chips";
 import { InventoryBar } from "@/components/collab/inventory-bar";
 import { ListingActions } from "@/components/collab/listing-actions";
+import { PartnerRafflePanel } from "@/components/collab/partner-raffle-panel";
 import type { AllocationStatus, RequestStatus } from "@prisma/client";
 
 export async function generateMetadata({ params }: { params: Promise<{ team: string; id: string }> }) {
@@ -150,6 +151,18 @@ export default async function ManageListingPage({ params }: { params: Promise<{ 
         </div>
 
         <div className="space-y-6">
+          {listing.distributionMethod === "RAFFLE" && listing.status !== "DRAFT" && listing.status !== "CANCELLED" && (
+            <PartnerRafflePanel
+              listingId={listing.id}
+              qualified={listing.qualifiedOpenCount}
+              available={listing.available}
+              windowEnded={listing.endAt.getTime() <= Date.now()}
+              drawnAt={listing.drawnAt}
+              drawSeed={listing.drawSeed}
+              canDraw
+            />
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
