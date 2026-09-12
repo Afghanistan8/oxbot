@@ -141,7 +141,22 @@ export const REQUIREMENT_META: Record<
     icon: "wallet",
     description: "Enter a wallet address on the selected chain.",
   },
+  NFT_HOLD: {
+    label: "Hold an NFT",
+    short: "NFT",
+    icon: "gem",
+    description: "Hold NFTs from a specific collection in your wallet.",
+  },
+  TOKEN_BALANCE: {
+    label: "Hold a token balance",
+    short: "Token",
+    icon: "coins",
+    description: "Hold a minimum balance of a specific token in your wallet.",
+  },
 };
+
+/** Requirement types verified against an on-chain wallet balance. */
+export const HOLDING_REQUIREMENTS: RequirementType[] = ["NFT_HOLD", "TOKEN_BALANCE"];
 
 /** Requirement types that involve X (Twitter). */
 export const TWITTER_REQUIREMENTS: RequirementType[] = [

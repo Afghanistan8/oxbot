@@ -83,6 +83,21 @@ export const integrations = {
       nonEmpty(process.env.S3_BUCKET) &&
       nonEmpty(process.env.S3_ACCESS_KEY_ID),
   },
+  nft: {
+    provider: (process.env.NFT_PROVIDER ?? "mock").toLowerCase() as
+      | "mock"
+      | "alchemy"
+      | "helius"
+      | "rpc",
+    // Live only when a non-mock provider is chosen AND it has something to call.
+    live:
+      !forceMocks &&
+      (process.env.NFT_PROVIDER ?? "mock").toLowerCase() !== "mock" &&
+      (nonEmpty(process.env.ALCHEMY_API_KEY) ||
+        nonEmpty(process.env.HELIUS_API_KEY) ||
+        nonEmpty(process.env.NFT_RPC_ETH) ||
+        nonEmpty(process.env.NFT_RPC_SOLANA)),
+  },
 } as const;
 
 /** True when at least one integration is running as a mock. */
@@ -93,7 +108,8 @@ export const anyMockActive =
   !integrations.twitter.apiLive ||
   !integrations.discord.oauthLive ||
   !integrations.discord.botLive ||
-  !integrations.uploads.live;
+  !integrations.uploads.live ||
+  !integrations.nft.live;
 
 export const env = {
   ...parsed.data,
@@ -117,4 +133,11 @@ export const env = {
   S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID ?? "",
   S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY ?? "",
   S3_PUBLIC_URL: process.env.S3_PUBLIC_URL ?? "",
+  // OxFoxes Collab
+  COLLAB_HOST: process.env.COLLAB_HOST ?? "",
+  AUTH_COOKIE_DOMAIN: process.env.AUTH_COOKIE_DOMAIN ?? "",
+  NFT_RPC_ETH: process.env.NFT_RPC_ETH ?? "",
+  NFT_RPC_SOLANA: process.env.NFT_RPC_SOLANA ?? "",
+  HELIUS_API_KEY: process.env.HELIUS_API_KEY ?? "",
+  ALCHEMY_API_KEY: process.env.ALCHEMY_API_KEY ?? "",
 } as const;

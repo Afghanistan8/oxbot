@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, Compass, BookOpen, LayoutDashboard } from "lucide-react";
+import { Menu, Compass, BookOpen, LayoutDashboard, Handshake } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -14,7 +14,7 @@ import {
  * Mobile-only menu for the public site header — surfaces the primary nav links
  * that are hidden below the `md` breakpoint on the desktop header.
  */
-export function SiteHeaderMobileMenu() {
+export function SiteHeaderMobileMenu({ collabHref }: { collabHref: string }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -43,6 +43,12 @@ export function SiteHeaderMobileMenu() {
           <Link href="/dashboard">
             <LayoutDashboard className="h-4 w-4" />
             For projects
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href={collabHref}>
+            <Handshake className="h-4 w-4" />
+            Collab
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>

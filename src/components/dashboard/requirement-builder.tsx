@@ -11,6 +11,8 @@ import {
   MessageCircle,
   Shield,
   Wallet,
+  Gem,
+  Coins,
   Plus,
   Trash2,
   ChevronUp,
@@ -72,6 +74,8 @@ const ICONS: Record<RequirementType, LucideIcon> = {
   DISCORD_MEMBER: MessageCircle,
   DISCORD_ROLE: Shield,
   WALLET: Wallet,
+  NFT_HOLD: Gem,
+  TOKEN_BALANCE: Coins,
 };
 
 const ADD_GROUPS: { label: string; types: RequirementType[] }[] = [

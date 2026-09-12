@@ -13,6 +13,8 @@ import {
   MessageCircle,
   Shield,
   Wallet,
+  Gem,
+  Coins,
   CheckCircle2,
   XCircle,
   Circle,
@@ -61,6 +63,8 @@ const REQ_ICONS: Record<RequirementType, LucideIcon> = {
   DISCORD_MEMBER: MessageCircle,
   DISCORD_ROLE: Shield,
   WALLET: Wallet,
+  NFT_HOLD: Gem,
+  TOKEN_BALANCE: Coins,
 };
 
 const SUBMIT_LABEL: Record<GiveawayType, string> = {

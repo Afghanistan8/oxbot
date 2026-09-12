@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { auth } from "@/lib/auth";
+import { collabEntryUrl } from "@/lib/collab/surface";
 import { getPrimaryTeamSlug } from "@/server/queries/teams";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
@@ -17,12 +18,13 @@ export async function SiteHeader() {
   // Giveaways are always team-scoped — route to the user's first project, or
   // to project creation if they don't have one yet.
   const primaryTeamSlug = user?.id ? await getPrimaryTeamSlug(user.id) : null;
+  const collabHref = collabEntryUrl();
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-ink-black/70 backdrop-blur-xl">
       <div className="container grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-4">
         <div className="flex items-center gap-2">
-          <SiteHeaderMobileMenu />
+          <SiteHeaderMobileMenu collabHref={collabHref} />
           <Logo />
         </div>
 
@@ -30,6 +32,7 @@ export async function SiteHeader() {
           <NavLink href="/">Explore</NavLink>
           <NavLink href="/guide">How it works</NavLink>
           <NavLink href="/dashboard">For projects</NavLink>
+          <NavLink href={collabHref}>Collab</NavLink>
         </nav>
 
         <div className="flex items-center justify-end gap-2">

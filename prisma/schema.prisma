@@ -73,6 +73,8 @@ enum RequirementType {
   DISCORD_MEMBER
   DISCORD_ROLE
   WALLET // future-ready; optional in Phase 1
+  NFT_HOLD // hold >= N NFTs from a collection (Collab public WL raffles)
+  TOKEN_BALANCE // hold >= a minimum balance of a fungible token
 }
 
 enum EntryStatus {
@@ -93,6 +95,50 @@ enum WinnerMethod {
   MANUAL
 }
 
+// --- OxFoxes Collab (whitelist partnership desk) ----------------------------
+
+enum AssetType {
+  NFT
+  TOKEN
+  OTHER
+}
+
+enum ListingStatus {
+  DRAFT
+  OPEN
+  PAUSED
+  ALLOCATED // every partner spot is spoken for
+  CLOSED
+  CANCELLED
+}
+
+enum DistributionMethod {
+  FCFS // first fully-qualified requests win, race-safe
+  CRITERIA // qualified requests go to a review queue
+  RAFFLE // qualified requester teams are drawn with a seeded CSPRNG at close
+  MANUAL // everything goes to the review queue
+}
+
+enum RequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  NEEDS_INFO
+  APPROVED
+  PARTIALLY_APPROVED
+  REJECTED
+  WAITLISTED
+  CANCELLED
+  EXPIRED
+}
+
+enum AllocationStatus {
+  RESERVED // granted; held for the partner until their wallets are confirmed
+  CONFIRMED // partner wallets confirmed; counts toward allocatedSpots
+  DELIVERED // listing team has added the wallets to its whitelist
+  REVOKED // spots returned to the listing's inventory
+}
+
 // ---------------------------------------------------------------------------
 // Auth (Auth.js / NextAuth v5 adapter contract)
 // ---------------------------------------------------------------------------
@@ -106,14 +152,17 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts     Account[]
-  sessions     Session[]
-  memberships  TeamMember[]
-  entries      Entry[]
-  wins         Winner[]
-  auditLogs    AuditLog[]
-  connections  SocialConnection[]
-  wallets      Wallet[]
+  accounts    Account[]
+  sessions    Session[]
+  memberships TeamMember[]
+  entries     Entry[]
+  wins        Winner[]
+  auditLogs   AuditLog[]
+  connections SocialConnection[]
+  wallets     Wallet[]
+
+  collabRequestsSubmitted CollabRequest[] @relation("CollabRequestSubmitter")
+  collabRequestsReviewed  CollabRequest[] @relation("CollabRequestReviewer")
 }
 
 model Account {
@@ -160,20 +209,20 @@ model VerificationToken {
 // ---------------------------------------------------------------------------
 
 model SocialConnection {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   userId         String
   provider       String // "twitter" | "discord"
   providerUserId String
   username       String?
   displayName    String?
   avatarUrl      String?
-  accessToken    String?  @db.Text
-  refreshToken   String?  @db.Text
+  accessToken    String?   @db.Text
+  refreshToken   String?   @db.Text
   expiresAt      DateTime?
   scope          String?
   raw            Json?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -204,41 +253,47 @@ model Wallet {
 // ---------------------------------------------------------------------------
 
 model Team {
-  id           String   @id @default(cuid())
-  slug         String   @unique
-  name         String
-  description  String?  @db.Text
-  logoUrl      String?
-  bannerUrl    String?
-  website      String?
-  xHandle      String? // official X (Twitter) handle, without @
-  discordInvite String?
-  discordGuildId String? // guild id once the oxbot Discord bot has been invited
+  id                String       @id @default(cuid())
+  slug              String       @unique
+  name              String
+  description       String?      @db.Text
+  logoUrl           String?
+  bannerUrl         String?
+  website           String?
+  xHandle           String? // official X (Twitter) handle, without @
+  discordInvite     String?
+  discordGuildId    String? // guild id once the oxbot Discord bot has been invited
   discordWebhookUrl String? // incoming webhook — auto-announces published giveaways
-  telegram     String?
-  chains       Blockchain[]
+  telegram          String?
+  chains            Blockchain[]
 
   // Primary blockchain + mint/launch details, shown on the project profile.
   primaryChain Blockchain?
   totalSupply  String? // free text: a number, or "TBD"
   mintPrice    String? // free text: e.g. "0.08 ETH", or "Free"
   mintAt       DateTime?
-  mintTba      Boolean  @default(false) // true = mint date "to be announced"
+  mintTba      Boolean     @default(false) // true = mint date "to be announced"
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   members   TeamMember[]
   giveaways Giveaway[]
   invites   TeamInvite[]
   auditLogs AuditLog[]
+
+  // OxFoxes Collab
+  collabListings          WhitelistListing[]
+  collabRequests          CollabRequest[]    @relation("CollabRequesterTeam")
+  collabAllocations       CollabAllocation[] @relation("CollabReceivingTeam")
+  collabCriteriaTemplates ListingCriteria[]  @relation("CollabCriteriaTemplates")
 }
 
 model TeamMember {
-  id       String   @id @default(cuid())
-  teamId   String
-  userId   String
-  role     TeamRole @default(EDITOR)
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  role      TeamRole @default(EDITOR)
   createdAt DateTime @default(now())
 
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -249,14 +304,14 @@ model TeamMember {
 }
 
 model TeamInvite {
-  id        String   @id @default(cuid())
-  teamId    String
-  email     String
-  role      TeamRole @default(EDITOR)
-  token     String   @unique @default(cuid())
-  expiresAt DateTime
+  id         String    @id @default(cuid())
+  teamId     String
+  email      String
+  role       TeamRole  @default(EDITOR)
+  token      String    @unique @default(cuid())
+  expiresAt  DateTime
   acceptedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
@@ -269,21 +324,21 @@ model TeamInvite {
 // ---------------------------------------------------------------------------
 
 model Giveaway {
-  id            String             @id @default(cuid())
-  teamId        String
-  slug          String             @unique
-  title         String
-  description   String?            @db.Text
-  bannerUrl     String?
-  prize         String             @db.Text
-  type          GiveawayType
-  status        GiveawayStatus     @default(DRAFT)
-  visibility    GiveawayVisibility @default(PUBLIC)
-  chain         Blockchain         @default(ETHEREUM)
-  winnersCount  Int                @default(1)
+  id           String             @id @default(cuid())
+  teamId       String
+  slug         String             @unique
+  title        String
+  description  String?            @db.Text
+  bannerUrl    String?
+  prize        String             @db.Text
+  type         GiveawayType
+  status       GiveawayStatus     @default(DRAFT)
+  visibility   GiveawayVisibility @default(PUBLIC)
+  chain        Blockchain         @default(ETHEREUM)
+  winnersCount Int                @default(1)
 
-  startAt       DateTime // stored in UTC
-  endAt         DateTime // stored in UTC
+  startAt DateTime // stored in UTC
+  endAt   DateTime // stored in UTC
 
   // Public display options
   hideEntryCount Boolean @default(false)
@@ -294,17 +349,22 @@ model Giveaway {
   telegram        String?
 
   // Random draw auditability
-  drawSeed  String?
-  drawnAt   DateTime?
+  drawSeed String?
+  drawnAt  DateTime?
 
   // FCFS monotonic counter (next seq to assign). Kept on the row for atomic bump.
   fcfsCursor Int @default(0)
+
+  // OxFoxes Collab: set when this giveaway is the public whitelist raffle for a
+  // listing's `publicSpots`. One raffle per listing.
+  listingId String? @unique
 
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   team         Team                  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  listing      WhitelistListing?     @relation(fields: [listingId], references: [id], onDelete: SetNull)
   requirements GiveawayRequirement[]
   entries      Entry[]
   codes        EntryCode[]
@@ -324,12 +384,16 @@ model GiveawayRequirement {
   //  TWITTER_LIKE:   { "tweetId": "123" }
   //  DISCORD_ROLE:   { "guildId": "...", "roleIds": ["...","..."] }
   //  CODE:           { "caseSensitive": false }
+  //  NFT_HOLD:       { "chain": "ETHEREUM", "contractAddress": "0x…", "minCount": 1,
+  //                    "tokenIds": ["1","2"], "label": "Lava Foxes" }
+  //  TOKEN_BALANCE:  { "chain": "SOLANA", "contractAddress": "<mint>", "minBalance": "100",
+  //                    "label": "LAVA" }
   config     Json            @default("{}")
   required   Boolean         @default(true)
   order      Int             @default(0)
 
-  giveaway  Giveaway                 @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
-  statuses  EntryRequirementStatus[]
+  giveaway Giveaway                 @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
+  statuses EntryRequirementStatus[]
 
   @@index([giveawayId])
 }
@@ -347,15 +411,15 @@ model Entry {
   seq         Int?
   // Arbitrary capture (wallet used, code redeemed, ip hash, etc.)
   metadata    Json        @default("{}")
-  submittedAt DateTime?   // set when status flips to COMPLETED
+  submittedAt DateTime? // set when status flips to COMPLETED
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  giveaway   Giveaway                 @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
-  user       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  statuses   EntryRequirementStatus[]
-  winner     Winner?
-  codeUse    EntryCodeRedemption?
+  giveaway Giveaway                 @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
+  user     User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  statuses EntryRequirementStatus[]
+  winner   Winner?
+  codeUse  EntryCodeRedemption?
 
   @@unique([giveawayId, userId]) // one entry per user per giveaway
   @@unique([giveawayId, seq]) // FCFS slot uniqueness
@@ -367,7 +431,7 @@ model EntryRequirementStatus {
   entryId       String
   requirementId String
   status        RequirementStatus @default(PENDING)
-  detail        Json?             // provider response snapshot for auditing
+  detail        Json? // provider response snapshot for auditing
   checkedAt     DateTime?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
@@ -454,4 +518,156 @@ model AuditLog {
   actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([teamId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// OxFoxes Collab — whitelist partnership desk
+//
+// Projects list whitelist inventory (WhitelistListing); other teams request an
+// allocation (CollabRequest); granted spots become CollabAllocation rows. A
+// listing's `publicSpots` slice is distributed through an ordinary Giveaway
+// linked via `Giveaway.listingId`, so the public raffle reuses the existing
+// task engine, FCFS sequencing and seeded draws.
+//
+// Inventory invariant (enforced transactionally in lib/collab/inventory.ts):
+//   totalSpots >= reservedSpots + allocatedSpots + publicSpots
+// ---------------------------------------------------------------------------
+
+model WhitelistListing {
+  id                 String             @id @default(cuid())
+  teamId             String
+  slug               String             @unique
+  title              String
+  description        String?            @db.Text
+  bannerUrl          String?
+  assetType          AssetType
+  chain              Blockchain
+  collectionName     String?
+  collectionAddress  String?
+  tokenSymbol        String?
+  tokenAddress       String?
+  mintOrTgeAt        DateTime?
+  totalSpots         Int
+  reservedSpots      Int                @default(0) // granted, awaiting partner wallet confirmation
+  allocatedSpots     Int                @default(0) // confirmed / delivered partner spots
+  publicSpots        Int                @default(0) // carved out for the public raffle
+  spotsPerRequestMin Int                @default(1)
+  spotsPerRequestMax Int                @default(50)
+  distributionMethod DistributionMethod @default(CRITERIA)
+  status             ListingStatus      @default(DRAFT)
+  visibility         GiveawayVisibility @default(PUBLIC)
+  startAt            DateTime
+  endAt              DateTime
+  hideRequestCount   Boolean            @default(false)
+  notesPrivate       String?            @db.Text
+  // Partner-raffle auditability (RAFFLE method): the seed the requester-team
+  // draw was run with, so the selection is reproducible.
+  drawSeed           String?
+  drawnAt            DateTime?
+  createdById        String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  team         Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  criteria     ListingCriteria?   @relation("ListingCriteria")
+  requests     CollabRequest[]
+  allocations  CollabAllocation[]
+  publicRaffle Giveaway?
+
+  @@index([teamId])
+  @@index([status, visibility])
+  @@index([chain])
+}
+
+/// Qualification thresholds. Either attached to one listing (`listingId`) or a
+/// reusable team template (`templateTeamId` + `name`, no listing).
+model ListingCriteria {
+  id                  String       @id @default(cuid())
+  listingId           String?      @unique
+  templateTeamId      String?
+  name                String?
+  minCommunitySize    Int?
+  minHolderCount      Int?
+  minTwitterFollowers Int?
+  minDiscordMembers   Int?
+  minRaffleEntries    Int? // completed entries across the requester team's oxbot giveaways
+  requiredChains      Blockchain[] @default([])
+  requiredAssetType   AssetType?
+  requireVerifiedTeam Boolean      @default(false)
+  // [{ "id": "r1", "label": "Doxxed team" }] — requester attests each rule.
+  customRules         Json?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  listing      WhitelistListing? @relation("ListingCriteria", fields: [listingId], references: [id], onDelete: Cascade)
+  templateTeam Team?             @relation("CollabCriteriaTemplates", fields: [templateTeamId], references: [id], onDelete: Cascade)
+
+  @@index([templateTeamId])
+}
+
+model CollabRequest {
+  id                 String        @id @default(cuid())
+  listingId          String
+  requesterTeamId    String
+  submittedById      String?
+  status             RequestStatus @default(SUBMITTED)
+  spotsRequested     Int
+  spotsGranted       Int?
+  pitch              String        @db.Text
+  audienceSummary    String?       @db.Text
+  communitySize      Int?
+  holderCount        Int?
+  twitterFollowers   Int?
+  discordMembers     Int?
+  requesterChains    Blockchain[]  @default([])
+  requesterAssetType AssetType?
+  // { "links": ["https://dune…"], "attestations": { "r1": true } }
+  evidence           Json?
+  walletForDelivery  String?
+  deliveryChain      Blockchain?
+  // Eligibility snapshot computed server-side at submission.
+  eligible           Boolean       @default(false)
+  eligibilityScore   Int           @default(0)
+  eligibility        Json?
+  requesterReply     String?       @db.Text // answer to a NEEDS_INFO review
+  reviewerNote       String?       @db.Text
+  reviewedById       String?
+  reviewedAt         DateTime?
+  expiresAt          DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  listing       WhitelistListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  requesterTeam Team              @relation("CollabRequesterTeam", fields: [requesterTeamId], references: [id], onDelete: Cascade)
+  submittedBy   User?             @relation("CollabRequestSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  reviewedBy    User?             @relation("CollabRequestReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  allocation    CollabAllocation?
+
+  @@index([listingId, status])
+  @@index([requesterTeamId])
+  @@index([listingId, createdAt])
+}
+
+model CollabAllocation {
+  id          String           @id @default(cuid())
+  listingId   String
+  requestId   String?          @unique
+  teamId      String // receiving team
+  spots       Int
+  status      AllocationStatus @default(RESERVED)
+  // [{ "address": "0x…", "chain": "ETHEREUM", "label": "treasury" }]
+  wallets     Json?
+  note        String?          @db.Text
+  confirmedAt DateTime?
+  deliveredAt DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  listing WhitelistListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  request CollabRequest?   @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  team    Team             @relation("CollabReceivingTeam", fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, status])
+  @@index([teamId])
 }

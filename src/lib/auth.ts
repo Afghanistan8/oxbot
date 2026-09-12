@@ -113,16 +113,69 @@ async function fetchProviderHandle(
   }
 }
 
+/**
+ * Cross-subdomain sessions for OxFoxes Collab. When AUTH_COOKIE_DOMAIN is set
+ * (e.g. ".oxbotfoxes.xyz") the session cookie is scoped to the parent domain so
+ * one sign-in covers both oxbot and the collab host. The cookie NAME matches
+ * Auth.js's default for the protocol, so enabling this never logs anyone out.
+ * Unset → Auth.js defaults (host-only cookie), exactly as before.
+ */
+const cookieDomain = env.AUTH_COOKIE_DOMAIN.trim();
+const useSecureCookies =
+  (process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? "").startsWith("https://") ||
+  process.env.VERCEL === "1";
+
+function sharedCookies(): NextAuthConfig["cookies"] {
+  if (!cookieDomain) return undefined;
+  const prefix = useSecureCookies ? "__Secure-" : "";
+  const options = {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    path: "/",
+    secure: useSecureCookies,
+    domain: cookieDomain,
+  };
+  return {
+    sessionToken: { name: `${prefix}authjs.session-token`, options },
+    callbackUrl: { name: `${prefix}authjs.callback-url`, options },
+  };
+}
+
+/** Hosts a post-sign-in redirect may target besides the app's own origin. */
+function isTrustedRedirectHost(hostname: string): boolean {
+  const collabHost = env.COLLAB_HOST.replace(/:\d+$/, "").toLowerCase();
+  if (collabHost && hostname === collabHost) return true;
+  if (!cookieDomain) return false;
+  const parent = cookieDomain.replace(/^\./, "").toLowerCase();
+  return hostname === parent || hostname.endsWith(`.${parent}`);
+}
+
 export const authConfig: NextAuthConfig = {
   adapter: PrismaAdapter(db),
   providers: buildProviders(),
   session: { strategy: "database" },
+  cookies: sharedCookies(),
   pages: {
     signIn: "/signin",
     verifyRequest: "/signin/verify",
     error: "/signin",
   },
   callbacks: {
+    /**
+     * Same-origin redirects as Auth.js's default, plus the Collab host — so
+     * signing in from collab.oxbotfoxes.xyz returns the user there.
+     */
+    redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      try {
+        const target = new URL(url);
+        if (target.origin === baseUrl) return url;
+        if (isTrustedRedirectHost(target.hostname.toLowerCase())) return url;
+      } catch {
+        // Malformed URL — fall through to the base.
+      }
+      return baseUrl;
+    },
     /**
      * Database session — attach the user id (and a couple of convenience fields)
      * to the session object consumed throughout the app.
