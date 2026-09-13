@@ -38,17 +38,21 @@ export function DashboardNav({ teams }: { teams: TeamListItem[] }) {
   const activeTeam = teams.find((t) => t.slug === activeSlug) ?? null;
 
   const base = activeSlug ? `/dashboard/${activeSlug}` : "/dashboard";
+  // Collab Managers are scoped to the Collab section only.
+  const collabOnly = activeTeam?.role === "COLLAB_MANAGER";
 
-  const links = activeSlug
-    ? [
-        { href: base, label: "Overview", icon: LayoutDashboard, exact: true },
-        { href: `${base}/giveaways`, label: "Giveaways", icon: Gift },
-        { href: `${base}/collab`, label: "Collab", icon: Handshake },
-        { href: `${base}/analytics`, label: "Analytics", icon: ChartBar },
-        { href: `${base}/members`, label: "Members", icon: Users },
-        { href: `${base}/settings`, label: "Settings", icon: Settings },
-      ]
-    : [{ href: "/dashboard", label: "All projects", icon: LayoutDashboard, exact: true }];
+  const links = !activeSlug
+    ? [{ href: "/dashboard", label: "All projects", icon: LayoutDashboard, exact: true }]
+    : collabOnly
+      ? [{ href: `${base}/collab`, label: "Collab", icon: Handshake }]
+      : [
+          { href: base, label: "Overview", icon: LayoutDashboard, exact: true },
+          { href: `${base}/giveaways`, label: "Giveaways", icon: Gift },
+          { href: `${base}/collab`, label: "Collab", icon: Handshake },
+          { href: `${base}/analytics`, label: "Analytics", icon: ChartBar },
+          { href: `${base}/members`, label: "Members", icon: Users },
+          { href: `${base}/settings`, label: "Settings", icon: Settings },
+        ];
 
   return (
     <nav className="space-y-6">
@@ -110,7 +114,7 @@ export function DashboardNav({ teams }: { teams: TeamListItem[] }) {
         })}
       </div>
 
-      {activeSlug && (
+      {activeSlug && !collabOnly && (
         <Link
           href={`${base}/giveaways/new`}
           className="flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2 text-sm font-medium text-scarlet-soft transition-colors hover:bg-primary/20 hover:text-white"

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Gift, Users, Trophy, Radio, Plus, ArrowRight, Settings } from "lucide-react";
 
 import { resolveTeamPage } from "@/server/queries/require-team-page";
@@ -27,7 +28,10 @@ export default async function TeamOverviewPage({
   params: Promise<{ team: string }>;
 }) {
   const { team: slug } = await params;
-  const { team } = await resolveTeamPage(slug);
+  // Allow any member down to Collab Manager, but send Collab Managers straight
+  // to their only section (they have no access to the overview stats).
+  const { team, membership } = await resolveTeamPage(slug, "COLLAB_MANAGER");
+  if (membership.role === "COLLAB_MANAGER") redirect(`/dashboard/${slug}/collab`);
 
   const [stats, giveaways, activity] = await Promise.all([
     getTeamStats(team.id),

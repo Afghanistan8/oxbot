@@ -12,7 +12,7 @@ export const metadata = { title: "New Collab listing" };
 /** Create a whitelist listing. EDITOR+. Identity is prefilled from the team profile. */
 export default async function NewListingPage({ params }: { params: Promise<{ team: string }> }) {
   const { team: slug } = await params;
-  const { team } = await resolveTeamPage(slug, "EDITOR");
+  const { team } = await resolveTeamPage(slug, "COLLAB_MANAGER");
   const templates = await getCriteriaTemplates(team.id);
 
   return (

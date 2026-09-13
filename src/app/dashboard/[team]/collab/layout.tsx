@@ -15,7 +15,7 @@ export default async function TeamCollabLayout({
   params: Promise<{ team: string }>;
 }) {
   const { team: slug } = await params;
-  const { team } = await resolveTeamPage(slug);
+  const { team } = await resolveTeamPage(slug, "COLLAB_MANAGER");
 
   const [incoming, outgoing] = await Promise.all([
     db.collabRequest.count({ where: { listing: { teamId: team.id }, status: { in: OPEN_REQUEST_STATUSES } } }),

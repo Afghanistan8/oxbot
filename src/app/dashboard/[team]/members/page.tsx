@@ -1,3 +1,5 @@
+import { notFound } from "next/navigation";
+
 import { resolveTeamViewer } from "@/server/queries/require-team-page";
 import { getTeamDetail } from "@/server/queries/teams";
 import { roleAtLeast } from "@/lib/constants";
@@ -19,6 +21,8 @@ export default async function MembersPage({
 }) {
   const { team: slug } = await params;
   const { team, membership, userId } = await resolveTeamViewer(slug);
+  // Collab Managers are scoped to Collab + whitelist raffles only.
+  if (membership.role === "COLLAB_MANAGER") notFound();
   const detail = await getTeamDetail(slug);
 
   // resolveTeamViewer already 404s on missing team; detail is guaranteed here.
@@ -55,10 +59,12 @@ export default async function MembersPage({
       {canManage && (
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle className="text-base">Invite a teammate</CardTitle>
+            <CardTitle className="text-base">Add a teammate</CardTitle>
             <CardDescription>
-              Admins manage members &amp; settings. Raffle Managers can run
-              giveaways on the project&apos;s behalf without full admin access.
+              Add someone by their Discord username — they must already have an
+              oxbot account. Admins manage members &amp; settings; Raffle
+              Managers run giveaways; Collab Managers are limited to whitelist
+              raffles &amp; collabs.
             </CardDescription>
           </CardHeader>
           <CardContent>

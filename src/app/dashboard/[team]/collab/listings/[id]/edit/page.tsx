@@ -12,7 +12,7 @@ export const metadata = { title: "Edit Collab listing" };
 
 export default async function EditListingPage({ params }: { params: Promise<{ team: string; id: string }> }) {
   const { team: slug, id } = await params;
-  const { team } = await resolveTeamPage(slug, "EDITOR");
+  const { team } = await resolveTeamPage(slug, "COLLAB_MANAGER");
   const [listing, templates] = await Promise.all([getManagedListing(team.id, id), getCriteriaTemplates(team.id)]);
   if (!listing || listing.status === "CANCELLED") notFound();
 

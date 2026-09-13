@@ -24,7 +24,7 @@ export const metadata = { title: "Review request" };
 /** One partner request: pitch, numbers, evidence, eligibility, and the decision. */
 export default async function ReviewRequestPage({ params }: { params: Promise<{ team: string; id: string }> }) {
   const { team: slug, id } = await params;
-  const { team, membership } = await resolveTeamPage(slug);
+  const { team, membership } = await resolveTeamPage(slug, "COLLAB_MANAGER");
   const r = await getIncomingRequest(team.id, id);
   if (!r) notFound();
 

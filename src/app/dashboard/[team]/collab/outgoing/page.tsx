@@ -30,7 +30,7 @@ export const metadata = { title: "Outgoing requests" };
 /** Requests this team filed with other projects, plus granted spots and delivery. */
 export default async function OutgoingRequestsPage({ params }: { params: Promise<{ team: string }> }) {
   const { team: slug } = await params;
-  const { team } = await resolveTeamPage(slug);
+  const { team } = await resolveTeamPage(slug, "COLLAB_MANAGER");
   const requests = await getOutgoingRequests(team.id);
 
   const secured = requests.reduce(

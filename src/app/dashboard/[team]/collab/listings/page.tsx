@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ team: str
 /** Every whitelist listing the team has created, newest first. */
 export default async function CollabListingsPage({ params }: { params: Promise<{ team: string }> }) {
   const { team: slug } = await params;
-  const { team } = await resolveTeamPage(slug);
+  const { team } = await resolveTeamPage(slug, "COLLAB_MANAGER");
   const listings = await getTeamListings(team.id);
 
   return (

@@ -24,7 +24,7 @@ export default async function AllocationsPage({
   searchParams: Promise<{ listing?: string }>;
 }) {
   const [{ team: slug }, sp] = await Promise.all([params, searchParams]);
-  const { team, membership } = await resolveTeamPage(slug);
+  const { team, membership } = await resolveTeamPage(slug, "COLLAB_MANAGER");
   const allocations = await getTeamAllocations(team.id, sp.listing || undefined);
   const live = allocations.filter((a) => a.status !== "REVOKED");
   const totals = {

@@ -26,6 +26,7 @@ enum TeamRole {
   OWNER
   ADMIN
   EDITOR
+  COLLAB_MANAGER // scoped: whitelist raffles + collabs only
 }
 
 enum GiveawayType {

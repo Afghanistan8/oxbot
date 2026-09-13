@@ -92,13 +92,26 @@ export const updateTeamSchema = z.object({
 });
 
 export const inviteMemberSchema = z.object({
-  email: z.string().trim().toLowerCase().email("Enter a valid email."),
-  role: z.enum(["ADMIN", "EDITOR"]),
+  // Invite by Discord username (the person must already have an oxbot account
+  // with Discord linked). Strip a leading @ and lowercase — Discord usernames
+  // are lowercase and unique.
+  discordUsername: z
+    .string()
+    .trim()
+    .transform((v) => v.replace(/^@/, "").toLowerCase())
+    .pipe(
+      z
+        .string()
+        .min(2, "Enter a Discord username.")
+        .max(32)
+        .regex(/^[a-z0-9._]+$/, "That doesn't look like a Discord username.")
+    ),
+  role: z.enum(["ADMIN", "EDITOR", "COLLAB_MANAGER"]),
 });
 
 export const changeRoleSchema = z.object({
   memberId: z.string().min(1),
-  role: z.enum(["OWNER", "ADMIN", "EDITOR"]),
+  role: z.enum(["OWNER", "ADMIN", "EDITOR", "COLLAB_MANAGER"]),
 });
 
 export type CreateTeamInput = z.infer<typeof createTeamSchema>;

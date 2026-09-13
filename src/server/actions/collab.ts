@@ -153,7 +153,7 @@ export async function createListingAction(
 
   const result = await runAction<{ id: string; teamSlug: string }>(async () => {
     checkMutateLimit(userId);
-    await requireTeamRole(userId, teamId, "EDITOR");
+    await requireTeamRole(userId, teamId, "COLLAB_MANAGER");
 
     const parsed = parseListingForm(formData);
     if (!parsed.success) return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
@@ -222,7 +222,7 @@ export async function updateListingAction(
       },
     });
     if (!existing) return fail("Listing not found.");
-    await requireTeamRole(userId, existing.teamId, "EDITOR");
+    await requireTeamRole(userId, existing.teamId, "COLLAB_MANAGER");
     if (existing.status === "CANCELLED") return fail("A cancelled listing can't be edited.");
 
     const parsed = parseListingForm(formData);
@@ -390,7 +390,7 @@ export async function saveCriteriaTemplateAction(
   const userId = await requireUserId();
   return runAction(async () => {
     checkMutateLimit(userId);
-    await requireTeamRole(userId, teamId, "EDITOR");
+    await requireTeamRole(userId, teamId, "COLLAB_MANAGER");
 
     const parsed = criteriaTemplateSchema.safeParse({
       name: formData.get("name"),
@@ -437,7 +437,7 @@ export async function deleteCriteriaTemplateAction(templateId: string): Promise<
       include: { templateTeam: { select: { slug: true } } },
     });
     if (!template?.templateTeamId || template.listingId) return fail("Template not found.");
-    await requireTeamRole(userId, template.templateTeamId, "EDITOR");
+    await requireTeamRole(userId, template.templateTeamId, "COLLAB_MANAGER");
 
     await db.listingCriteria.delete({ where: { id: templateId } });
     await recordAudit({
@@ -504,7 +504,7 @@ export async function submitRequestAction(
     if (!parsed.success) return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
     const data = parsed.data;
 
-    await requireTeamRole(userId, data.requesterTeamId, "EDITOR");
+    await requireTeamRole(userId, data.requesterTeamId, "COLLAB_MANAGER");
 
     const listing = await db.whitelistListing.findUnique({
       where: { id: listingId },
@@ -643,7 +643,7 @@ async function loadRequestForListingTeam(requestId: string, userId: string) {
     },
   });
   if (!request) throw new AuthzError("Request not found.", "NOT_FOUND");
-  await requireTeamRole(userId, request.listing.teamId, "EDITOR");
+  await requireTeamRole(userId, request.listing.teamId, "COLLAB_MANAGER");
   return request;
 }
 
@@ -757,7 +757,7 @@ export async function drawPartnerRaffleAction(listingId: string): Promise<Action
       include: { team: { select: { id: true, slug: true, name: true } } },
     });
     if (!listing) return fail("Listing not found.");
-    await requireTeamRole(userId, listing.teamId, "EDITOR");
+    await requireTeamRole(userId, listing.teamId, "COLLAB_MANAGER");
 
     const seed = generateDrawSeed();
     let result;
@@ -825,7 +825,7 @@ async function loadRequestForRequesterTeam(requestId: string, userId: string) {
     },
   });
   if (!request) throw new AuthzError("Request not found.", "NOT_FOUND");
-  await requireTeamRole(userId, request.requesterTeamId, "EDITOR");
+  await requireTeamRole(userId, request.requesterTeamId, "COLLAB_MANAGER");
   return request;
 }
 
@@ -928,7 +928,7 @@ export async function submitAllocationWalletsAction(
       },
     });
     if (!allocation) return fail("Allocation not found.");
-    await requireTeamRole(userId, allocation.teamId, "EDITOR");
+    await requireTeamRole(userId, allocation.teamId, "COLLAB_MANAGER");
     if (allocation.status === "REVOKED" || allocation.status === "DELIVERED") {
       return fail(`This allocation is already ${allocation.status.toLowerCase()}.`);
     }
@@ -987,7 +987,7 @@ export async function setAllocationStatusAction(
       },
     });
     if (!allocation) return fail("Allocation not found.");
-    await requireTeamRole(userId, allocation.listing.teamId, target === "REVOKED" ? "ADMIN" : "EDITOR");
+    await requireTeamRole(userId, allocation.listing.teamId, target === "REVOKED" ? "ADMIN" : "COLLAB_MANAGER");
 
     try {
       await db.$transaction(async (tx) => {
@@ -1051,7 +1051,7 @@ export async function openPublicRaffleAction(
       },
     });
     if (!listing) return fail("Listing not found.");
-    await requireTeamRole(userId, listing.teamId, "EDITOR");
+    await requireTeamRole(userId, listing.teamId, "COLLAB_MANAGER");
 
     if (listing.status === "CANCELLED") return fail("This listing was cancelled.");
     if (listing.publicRaffle) return fail("This listing already has a public raffle.");

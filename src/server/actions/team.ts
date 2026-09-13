@@ -8,8 +8,7 @@ import { requireUserId } from "@/lib/session";
 import { requireTeamRole, AuthzError } from "@/lib/authz";
 import { recordAudit } from "@/lib/audit";
 import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
-import { randomToken } from "@/lib/giveaway/codes";
-import { roleAtLeast } from "@/lib/constants";
+import { roleAtLeast, ROLE_META } from "@/lib/constants";
 import {
   createTeamSchema,
   updateTeamSchema,
@@ -179,47 +178,55 @@ export async function inviteMemberAction(
     await requireTeamRole(userId, teamId, "ADMIN");
 
     const parsed = inviteMemberSchema.safeParse({
-      email: formData.get("email"),
+      discordUsername: formData.get("discordUsername"),
       role: formData.get("role"),
     });
     if (!parsed.success) {
       return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
     }
-    const { email, role } = parsed.data;
+    const { discordUsername, role } = parsed.data;
 
-    // If the invitee already has an account AND is already a member, no-op.
-    const existingUser = await db.user.findUnique({ where: { email } });
-    if (existingUser) {
-      const existingMember = await db.teamMember.findUnique({
-        where: { teamId_userId: { teamId, userId: existingUser.id } },
-      });
-      if (existingMember) {
-        return fail("That person is already a member of this project.");
-      }
+    // The invitee must already have an oxbot account with Discord linked — we
+    // resolve them by their Discord username and add them instantly (no email,
+    // no acceptance step).
+    const connection = await db.socialConnection.findFirst({
+      where: { provider: "discord", username: { equals: discordUsername, mode: "insensitive" } },
+      select: { userId: true },
+    });
+    if (!connection) {
+      return fail(
+        "Please fix the errors below.",
+        {
+          discordUsername: [
+            `No oxbot account is linked to @${discordUsername}. Ask them to sign in to oxbot with Discord first.`,
+          ],
+        }
+      );
+    }
+
+    const existingMember = await db.teamMember.findUnique({
+      where: { teamId_userId: { teamId, userId: connection.userId } },
+      select: { id: true },
+    });
+    if (existingMember) {
+      return fail("That person is already a member of this project.");
     }
 
     const team = await db.team.findUniqueOrThrow({ where: { id: teamId } });
-    const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days
-
-    // Upsert the invite so re-inviting refreshes the token/expiry.
-    const invite = await db.teamInvite.upsert({
-      where: { teamId_email: { teamId, email } },
-      create: { teamId, email, role, token: randomToken(24), expiresAt },
-      update: { role, token: randomToken(24), expiresAt, acceptedAt: null },
+    await db.teamMember.create({
+      data: { teamId, userId: connection.userId, role },
     });
 
     await recordAudit({
       teamId,
       actorId: userId,
-      action: "member.invite",
-      target: invite.id,
-      meta: { email, role },
+      action: "member.add",
+      target: connection.userId,
+      meta: { discordUsername, role },
     });
 
-    // Email delivery of the invite link is wired via the email integration in
-    // Phase 2; for now the link is shown in the dashboard for copy/paste.
     revalidatePath(`/dashboard/${team.slug}/members`);
-    return ok(undefined, `Invite created for ${email}.`);
+    return ok(undefined, `Added @${discordUsername} as ${ROLE_META[role].label}.`);
   });
 }
 

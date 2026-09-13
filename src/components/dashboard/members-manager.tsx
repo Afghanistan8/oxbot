@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { MoreHorizontal, Trash2, Copy, Check, Shield, Crown, Pencil } from "lucide-react";
+import { MoreHorizontal, Trash2, Copy, Check, Shield, Crown, Pencil, Handshake } from "lucide-react";
 
 import {
   changeRoleAction,
@@ -47,6 +47,7 @@ const ROLE_ICON: Record<TeamRole, typeof Shield> = {
   OWNER: Crown,
   ADMIN: Shield,
   EDITOR: Pencil,
+  COLLAB_MANAGER: Handshake,
 };
 
 /**
@@ -132,14 +133,14 @@ function MemberRow({
   const [pending, startTransition] = useTransition();
   const RoleIcon = ROLE_ICON[member.role];
 
-  // Only owners can modify owners or grant ownership.
+  // Managers can edit any non-owner member; only an owner can edit owner rows.
   const canEditThis =
-    canManage &&
-    (viewerRole === "OWNER" || member.role === "EDITOR" || member.role === "ADMIN") &&
-    !(member.role === "OWNER" && viewerRole !== "OWNER");
+    canManage && (member.role !== "OWNER" || viewerRole === "OWNER");
 
   const roleOptions: TeamRole[] =
-    viewerRole === "OWNER" ? ["OWNER", "ADMIN", "EDITOR"] : ["ADMIN", "EDITOR"];
+    viewerRole === "OWNER"
+      ? ["OWNER", "ADMIN", "EDITOR", "COLLAB_MANAGER"]
+      : ["ADMIN", "EDITOR", "COLLAB_MANAGER"];
 
   function onRoleChange(role: string) {
     startTransition(async () => {

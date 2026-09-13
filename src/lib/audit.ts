@@ -18,6 +18,7 @@ export type AuditAction =
   | "team.delete"
   | "member.invite"
   | "member.invite.revoke"
+  | "member.add"
   | "member.join"
   | "member.role_change"
   | "member.remove"

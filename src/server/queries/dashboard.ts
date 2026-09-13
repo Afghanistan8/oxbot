@@ -102,6 +102,8 @@ export type ManagedGiveaway = {
   xAccount: string | null;
   discordServerId: string | null;
   telegram: string | null;
+  /** Set when this giveaway is a Collab/whitelist public raffle for a listing. */
+  listingId: string | null;
   drawnAt: Date | null;
   drawSeed: string | null;
   createdAt: Date;
@@ -154,6 +156,7 @@ export async function getManagedGiveaway(
     xAccount: g.xAccount,
     discordServerId: g.discordServerId,
     telegram: g.telegram,
+    listingId: g.listingId,
     drawnAt: g.drawnAt,
     drawSeed: g.drawSeed,
     createdAt: g.createdAt,

@@ -27,7 +27,7 @@ export default async function IncomingRequestsPage({
   searchParams: Promise<{ filter?: string; listing?: string }>;
 }) {
   const [{ team: slug }, sp] = await Promise.all([params, searchParams]);
-  const { team } = await resolveTeamPage(slug);
+  const { team } = await resolveTeamPage(slug, "COLLAB_MANAGER");
   const filter = (FILTERS.find((f) => f.key === sp.filter)?.key ?? "open") as IncomingFilter;
   const listingId = sp.listing || undefined;
 

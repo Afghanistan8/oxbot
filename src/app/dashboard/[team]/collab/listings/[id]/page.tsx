@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: { params: Promise<{ team: str
 /** Listing management — inventory, criteria, request pipeline, lifecycle. */
 export default async function ManageListingPage({ params }: { params: Promise<{ team: string; id: string }> }) {
   const { team: slug, id } = await params;
-  const { team, membership } = await resolveTeamPage(slug);
+  const { team, membership } = await resolveTeamPage(slug, "COLLAB_MANAGER");
   const listing = await getManagedListing(team.id, id);
   if (!listing) notFound();
 

@@ -22,7 +22,7 @@ export const metadata = { title: "Public raffles" };
  */
 export default async function CollabRafflesPage({ params }: { params: Promise<{ team: string }> }) {
   const { team: slug } = await params;
-  const { team } = await resolveTeamPage(slug);
+  const { team } = await resolveTeamPage(slug, "COLLAB_MANAGER");
   const rows = await getTeamPublicRaffles(team.id);
 
   return (
