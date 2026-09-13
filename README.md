@@ -104,6 +104,7 @@ can develop the whole flow without any third-party setup:
 | **X (Twitter)** | Connect + follow/like/retweet auto-pass | OAuth 2.0 + API checks |
 | **Discord** | Connect + member/role checks auto-pass | OAuth2 + bot role checks |
 | **Uploads** | Saved to `/public/uploads` | S3-compatible storage |
+| **NFT / token holdings** | Saved wallet + "I hold this" completes the task | Alchemy / Helius / JSON-RPC balance checks |
 
 Set `OXBOT_FORCE_MOCKS=1` to force mock mode even when keys are present.
 
@@ -165,6 +166,64 @@ Supabase Storage, or MinIO.
 | `npm run db:seed` | Seed demo data |
 | `npm run db:studio` | Open Prisma Studio |
 | `npm run db:reset` | Reset the database (destructive) |
+| `npm run collab:selftest` | Collab eligibility / raffle checks + FCFS race test (`-- --no-db` for pure checks) |
+
+---
+
+## 🤝 OxFoxes Collab
+
+**OxFoxes Collab** is a whitelist partnership desk that runs inside this app —
+same codebase, database, session and design system — on its own host
+(`collab.oxbotfoxes.xyz`) or at `/collab` on any host.
+
+- **Listings** — a project lists whitelist spots (NFT or token, chain, total,
+  min/max per partner, an optional public raffle slice), qualification criteria
+  and a request window.
+- **Requests** — other projects/DAOs pitch for spots with self-reported stats,
+  evidence links and attestations. A live eligibility meter scores them with the
+  same engine the server uses (plus oxbot-verified raffle entries and
+  verified-project status).
+- **Distribution** — `FCFS` (qualified requests that fit are approved instantly),
+  `CRITERIA` (review queue), `RAFFLE` (qualified teams drawn with a stored CSPRNG
+  seed) or `MANUAL`. Approvals can be partial.
+- **Delivery** — partners submit wallets, the listing team exports a CSV and marks
+  allocations delivered or revokes them. Off-chain only; nothing is minted.
+- **Public raffles** — a listing's public slice is an ordinary giveaway linked by
+  `Giveaway.listingId`, so it uses the existing task engine, draws and winner
+  export. New `NFT_HOLD` and `TOKEN_BALANCE` tasks gate entry on holdings.
+
+**Inventory safety.** `totalSpots ≥ reservedSpots + allocatedSpots + publicSpots`
+is enforced in `src/lib/collab/inventory.ts`: every grant, approval and raffle
+draw row-locks the listing (`SELECT … FOR UPDATE`) inside one transaction.
+`npm run collab:selftest` races 12 teams for 9 FCFS spots against a real database
+and asserts nothing is oversold (it creates and deletes its own rows).
+
+**Privacy.** Public pages show listing-level fields and counts only (and the
+count can be hidden). Requester identities, pitches, stats and wallets are
+visible only to the listing team; exports are team-gated.
+
+### Routing
+
+| Request | Serves |
+| --- | --- |
+| `oxbotfoxes.xyz/*` | oxbot, unchanged |
+| `collab.oxbotfoxes.xyz/listings` | rewritten by `src/middleware.ts` to `src/app/(collab)/collab/listings` |
+| `collab.oxbotfoxes.xyz/dashboard`, `/signin`, `/profile`, `/giveaways`, `/api` | shared app routes (not rewritten) |
+| `any-host/collab/*` | Collab directly — use this locally, no DNS needed |
+
+Locally, open <http://localhost:3000/collab>, or set `COLLAB_HOST=collab.localhost:3000`
+and open <http://collab.localhost:3000>. The team side lives at
+`/dashboard/[team]/collab` (listings, incoming, outgoing, public raffles,
+allocations, criteria templates).
+
+### Deploying the subdomain
+
+1. Add `collab.oxbotfoxes.xyz` as a domain on the same Vercel project.
+2. Set `COLLAB_HOST=collab.oxbotfoxes.xyz` and `AUTH_COOKIE_DOMAIN=.oxbotfoxes.xyz`
+   so one sign-in covers both hosts (the cookie name is unchanged, so nobody is
+   logged out).
+3. Holdings checks are mocked until you set `NFT_PROVIDER` (`alchemy` / `helius` /
+   `rpc`) with `ALCHEMY_API_KEY`, `HELIUS_API_KEY`, `NFT_RPC_ETH` or `NFT_RPC_SOLANA`.
 
 ---
 
@@ -176,7 +235,10 @@ src/
     page.tsx               # Landing = public giveaways
     giveaways/[slug]/      # Public giveaway page + entry wizard
     dashboard/             # Founder side (auth-gated): teams, giveaways, entrants
+      [team]/collab/       # Collab desk: listings, requests, allocations, raffles
+    (collab)/collab/       # OxFoxes Collab public surface (landing, listings, raffles, guide)
     api/                   # Auth, uploads, captcha route handlers
+  middleware.ts            # Collab host detection + rewrite
   components/
     ui/                    # shadcn/ui primitives (red-themed)
     brand/ giveaway/ dashboard/ entry/ marketing/
@@ -184,9 +246,13 @@ src/
     brand.ts               # Single source of truth for the brand name
     db.ts auth.ts env.ts   # DB client, auth config, validated env
     rate-limit.ts audit.ts
-    integrations/          # twitter, discord, email, captcha, uploads (mockable)
+    brand-collab.ts        # OxFoxes Collab brand copy
+    integrations/          # twitter, discord, email, captcha, uploads, nft (mockable)
     giveaway/              # winner-selection, entry-validation, codes
-  server/actions/          # Server Actions (team, giveaway, entry, codes, winners)
+    collab/                # inventory (locked tx), requests, eligibility, host routing
+  server/actions/          # Server Actions (team, giveaway, entry, codes, winners, collab)
+scripts/
+  collab-selftest.ts       # Collab checks + FCFS race test
 prisma/
   schema.prisma            # Data model
   seed.ts                  # Demo seed

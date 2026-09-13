@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { brand } from "@/lib/brand";
 import { auth } from "@/lib/auth";
+import { collabEntryUrl } from "@/lib/collab/surface";
 import { getPrimaryTeamSlug } from "@/server/queries/teams";
 import { Logo } from "@/components/brand/logo";
 
@@ -27,6 +28,7 @@ export async function SiteFooter() {
               <FooterLink href="/">Explore giveaways</FooterLink>
               <FooterLink href="/guide">How to use</FooterLink>
               <FooterLink href="/dashboard">Project dashboard</FooterLink>
+              <FooterLink href={collabEntryUrl()}>Collab — whitelist desk</FooterLink>
               {primaryTeamSlug && (
                 <FooterLink href={`/dashboard/${primaryTeamSlug}/giveaways/new`}>
                   Create giveaway
