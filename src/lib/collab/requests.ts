@@ -41,6 +41,21 @@ export type FileRequestInput = {
   holderCount: number | null;
   twitterFollowers: number | null;
   discordMembers: number | null;
+  /** Community name, links, reported raffle entries and contact details. */
+  community: {
+    communityName: string | null;
+    communityX: string | null;
+    communityDiscord: string | null;
+    communityTelegram: string | null;
+    communityTiktok: string | null;
+    communityInstagram: string | null;
+    reportedRaffleEntries: number | null;
+    contactName: string | null;
+    contactEmail: string | null;
+    contactX: string | null;
+    contactDiscord: string | null;
+    contactTelegram: string | null;
+  };
   requesterChains: Blockchain[];
   requesterAssetType: AssetType | null;
   evidence: { links: string[]; attestations: Record<string, boolean> };
@@ -134,6 +149,7 @@ export async function fileRequest(
           holderCount: input.holderCount,
           twitterFollowers: input.twitterFollowers,
           discordMembers: input.discordMembers,
+          ...input.community,
           requesterChains: input.requesterChains,
           requesterAssetType: input.requesterAssetType,
           evidence: input.evidence as unknown as Prisma.InputJsonValue,

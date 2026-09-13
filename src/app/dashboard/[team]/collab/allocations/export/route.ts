@@ -32,6 +32,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ team: st
 
     const header = [
       "Team",
+      "Community",
       "Listing",
       "Spots",
       "Status",
@@ -39,8 +40,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ team: st
       "Wallet Chain",
       "Wallet Label",
       "Contact Wallet",
-      "X Handle",
-      "Discord",
+      "Contact Name",
+      "Contact Email",
+      "Contact X",
+      "Contact Discord",
+      "Contact Telegram",
+      "Team X",
+      "Team Discord",
       "Granted At",
       "Confirmed At",
       "Delivered At",
@@ -48,6 +54,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ team: st
     const rows = allocations.flatMap((a) => {
       const base = (wallet: { address: string; chain: string; label: string } | null) => [
         a.team.name,
+        a.request?.communityName ?? "",
         a.listing.title,
         a.spots,
         a.status,
@@ -55,6 +62,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ team: st
         wallet ? (CHAIN_META[wallet.chain as keyof typeof CHAIN_META]?.label ?? wallet.chain) : "",
         wallet?.label ?? "",
         a.request?.walletForDelivery ?? "",
+        a.request?.contactName ?? "",
+        a.request?.contactEmail ?? "",
+        a.request?.contactX ? `@${a.request.contactX}` : "",
+        a.request?.contactDiscord ?? "",
+        a.request?.contactTelegram ? `@${a.request.contactTelegram}` : "",
         a.team.xHandle ? `@${a.team.xHandle}` : "",
         a.team.discordInvite ?? "",
         formatDateTime(a.createdAt, "UTC"),

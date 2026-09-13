@@ -606,36 +606,52 @@ model ListingCriteria {
 }
 
 model CollabRequest {
-  id                 String        @id @default(cuid())
-  listingId          String
-  requesterTeamId    String
-  submittedById      String?
-  status             RequestStatus @default(SUBMITTED)
-  spotsRequested     Int
-  spotsGranted       Int?
-  pitch              String        @db.Text
-  audienceSummary    String?       @db.Text
-  communitySize      Int?
-  holderCount        Int?
-  twitterFollowers   Int?
-  discordMembers     Int?
-  requesterChains    Blockchain[]  @default([])
-  requesterAssetType AssetType?
+  id                    String        @id @default(cuid())
+  listingId             String
+  requesterTeamId       String
+  submittedById         String?
+  status                RequestStatus @default(SUBMITTED)
+  spotsRequested        Int
+  spotsGranted          Int?
+  pitch                 String        @db.Text
+  audienceSummary       String?       @db.Text
+  communitySize         Int?
+  holderCount           Int?
+  twitterFollowers      Int?
+  discordMembers        Int?
+  // Community being pitched (self-reported; links normalized to https URLs).
+  communityName         String?
+  communityX            String?
+  communityDiscord      String?
+  communityTelegram     String?
+  communityTiktok       String?
+  communityInstagram    String?
+  // Raffle entries the requester reports running (oxbot-verified entries are
+  // computed separately for eligibility).
+  reportedRaffleEntries Int?
+  // How to reach the requester — PRIVATE to the listing team.
+  contactName           String?
+  contactEmail          String?
+  contactX              String?
+  contactDiscord        String?
+  contactTelegram       String?
+  requesterChains       Blockchain[]  @default([])
+  requesterAssetType    AssetType?
   // { "links": ["https://dune…"], "attestations": { "r1": true } }
-  evidence           Json?
-  walletForDelivery  String?
-  deliveryChain      Blockchain?
+  evidence              Json?
+  walletForDelivery     String?
+  deliveryChain         Blockchain?
   // Eligibility snapshot computed server-side at submission.
-  eligible           Boolean       @default(false)
-  eligibilityScore   Int           @default(0)
-  eligibility        Json?
-  requesterReply     String?       @db.Text // answer to a NEEDS_INFO review
-  reviewerNote       String?       @db.Text
-  reviewedById       String?
-  reviewedAt         DateTime?
-  expiresAt          DateTime?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  eligible              Boolean       @default(false)
+  eligibilityScore      Int           @default(0)
+  eligibility           Json?
+  requesterReply        String?       @db.Text // answer to a NEEDS_INFO review
+  reviewerNote          String?       @db.Text
+  reviewedById          String?
+  reviewedAt            DateTime?
+  expiresAt             DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
   listing       WhitelistListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
   requesterTeam Team              @relation("CollabRequesterTeam", fields: [requesterTeamId], references: [id], onDelete: Cascade)

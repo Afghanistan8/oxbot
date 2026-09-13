@@ -52,7 +52,9 @@ export function RequestsTable({ requests, teamSlug }: { requests: IncomingReques
                       <AvatarFallback>{r.requesterTeam.name.slice(0, 2).toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-white">{r.requesterTeam.name}</p>
+                      <p className="truncate text-sm font-medium text-white">
+                        {r.communityName && r.communityName !== r.requesterTeam.name ? r.communityName : r.requesterTeam.name}
+                      </p>
                       <p className="truncate text-xs text-muted-foreground">
                         <LocalTime value={r.createdAt} mode="date" />
                         {r.requesterTeam.xHandle && <> · @{r.requesterTeam.xHandle}</>}

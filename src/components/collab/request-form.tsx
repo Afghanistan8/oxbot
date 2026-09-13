@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { CheckCircle2, Hourglass, Loader2, Plus, Send, Trash2, Zap } from "lucide-react";
 import type { AssetType, Blockchain } from "@prisma/client";
@@ -11,6 +11,7 @@ import type { RequesterTeamOption } from "@/server/queries/collab-public";
 import { evaluateEligibility, type CriteriaInput } from "@/lib/collab/eligibility";
 import { ASSET_TYPES, ASSET_TYPE_META, REQUEST_STATUS_META } from "@/lib/collab/constants";
 import { ALL_CHAINS, CHAIN_META } from "@/lib/constants";
+import { COMMUNITY_PLATFORMS } from "@/lib/collab/socials";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ export function RequestForm({
   dashboardBase,
   listingHref,
   blockedReason,
+  defaultContact,
 }: {
   listing: {
     id: string;
@@ -61,7 +63,10 @@ export function RequestForm({
   listingHref: string;
   /** Why a new request can't be filed right now (null = form is open). */
   blockedReason: string | null;
+  /** Prefill for "How to reach you" from the signed-in account. */
+  defaultContact: { name: string; email: string };
 }) {
+  const [, startTransition] = useTransition();
   const action = useMemo(() => submitRequestAction.bind(null, listing.id), [listing.id]);
   const [state, formAction, pending] = useActionState(action, initial);
 
@@ -72,6 +77,8 @@ export function RequestForm({
 
   const [spots, setSpots] = useState(String(Math.min(cap, Math.max(listing.spotsPerRequestMin, 10))));
   const [communitySize, setCommunitySize] = useState("");
+  const [communityName, setCommunityName] = useState(selectable[0]?.name ?? "");
+  const [raffleEntries, setRaffleEntries] = useState("");
   const [holderCount, setHolderCount] = useState("");
   const [twitterFollowers, setTwitterFollowers] = useState("");
   const [discordMembers, setDiscordMembers] = useState("");
@@ -81,8 +88,11 @@ export function RequestForm({
   const [attested, setAttested] = useState<Set<string>>(new Set());
 
   function pickTeam(id: string) {
+    const next = teams.find((t) => t.id === id);
+    // Follow the team's name unless the requester already typed their own.
+    if (!communityName.trim() || communityName === team?.name) setCommunityName(next?.name ?? "");
     setTeamId(id);
-    setChains(teams.find((t) => t.id === id)?.chains ?? []);
+    setChains(next?.chains ?? []);
   }
 
   const eligibility = useMemo(
@@ -130,8 +140,16 @@ export function RequestForm({
           ? "You qualify — this goes straight to their review queue."
           : "Below criteria — you can still submit; it will be flagged for the reviewer.";
 
+  // Dispatch from onSubmit rather than <form action>: React resets a form after
+  // an action runs, which would wipe this long form on a single validation error.
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    startTransition(() => formAction(formData));
+  }
+
   return (
-    <form action={formAction} className="grid gap-6 lg:grid-cols-[1fr_360px]">
+    <form onSubmit={onSubmit} noValidate className="grid gap-6 lg:grid-cols-[1fr_360px]">
       <div className="min-w-0 space-y-6">
         <FormMessage state={state} />
         <input type="hidden" name="requesterTeamId" value={teamId} />
@@ -177,16 +195,82 @@ export function RequestForm({
           </CardContent>
         </Card>
 
+        {/* --- Community --- */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Your community</CardTitle>
+            <CardDescription>Who gets the spots. Self-reported and shown to the reviewer as such.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div>
+              <Label htmlFor="communityName">
+                Community name <Req />
+              </Label>
+              <Input
+                id="communityName"
+                name="communityName"
+                value={communityName}
+                onChange={(e) => setCommunityName(e.target.value)}
+                placeholder="e.g. Arch DAO"
+                maxLength={80}
+              />
+              <FieldError errors={fe.communityName} />
+            </div>
+
+            <div>
+              <p className="mb-1 text-sm font-medium text-white">
+                Community links <Req />
+              </p>
+              <p className="mb-3 text-xs text-muted-foreground">At least one. Paste a link or just the @handle.</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {COMMUNITY_PLATFORMS.map((p) => (
+                  <div key={p.key}>
+                    <Label htmlFor={p.field} className="text-xs text-muted-foreground">
+                      {p.label}
+                    </Label>
+                    <Input id={p.field} name={p.field} placeholder={p.placeholder} maxLength={300} autoComplete="off" />
+                    <FieldError errors={fe[p.field]} />
+                  </div>
+                ))}
+              </div>
+              <FieldError errors={fe.communityLinks} />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <StatInput
+                id="communitySize"
+                label="Community size"
+                required
+                value={communitySize}
+                onChange={setCommunitySize}
+                error={fe.communitySize}
+              />
+              <StatInput
+                id="reportedRaffleEntries"
+                label="Raffle entries"
+                hint="Typical entries your community drives per raffle"
+                required
+                value={raffleEntries}
+                onChange={setRaffleEntries}
+                error={fe.reportedRaffleEntries}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* --- Ask --- */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Your ask</CardTitle>
             <CardDescription>
-              {listing.spotsPerRequestMin}–{listing.spotsPerRequestMax} spots per partner · {listing.available} available now
+              {listing.spotsPerRequestMin}–{listing.spotsPerRequestMax} WL spots per partner · {listing.available} available now
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="max-w-[12rem]">
-              <Label htmlFor="spotsRequested">Spots requested</Label>
+            <div className="max-w-[14rem]">
+              <Label htmlFor="spotsRequested">
+                WL spots requested <Req />
+              </Label>
               <Input
                 id="spotsRequested"
                 name="spotsRequested"
@@ -195,18 +279,18 @@ export function RequestForm({
                 max={listing.spotsPerRequestMax}
                 value={spots}
                 onChange={(e) => setSpots(e.target.value)}
-                required
               />
               <FieldError errors={fe.spotsRequested} />
             </div>
             <div>
-              <Label htmlFor="pitch">Pitch</Label>
+              <Label htmlFor="pitch">
+                Pitch <Req />
+              </Label>
               <Textarea
                 id="pitch"
                 name="pitch"
                 rows={5}
                 maxLength={4000}
-                required
                 placeholder={`Why should ${listing.teamName} partner with you? Who gets the spots, and how will you distribute them?`}
               />
               <FieldError errors={fe.pitch} />
@@ -218,20 +302,58 @@ export function RequestForm({
                 name="audienceSummary"
                 rows={3}
                 maxLength={2000}
-                placeholder="Who your community is — regions, collectors vs traders, overlap with their audience."
+                placeholder="Regions, collectors vs traders, overlap with their audience."
               />
             </div>
           </CardContent>
         </Card>
 
+        {/* --- Contact --- */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Your numbers</CardTitle>
-            <CardDescription>Self-reported and shown to the reviewer as such. Back them up with links below.</CardDescription>
+            <CardTitle className="text-base">How to reach you</CardTitle>
+            <CardDescription>Only {listing.teamName} sees this — for coordinating the allocation.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="contactName">
+                  Contact name <Req />
+                </Label>
+                <Input id="contactName" name="contactName" defaultValue={defaultContact.name} maxLength={80} autoComplete="name" />
+                <FieldError errors={fe.contactName} />
+              </div>
+              <div>
+                <Label htmlFor="contactEmail">
+                  Contact email <Req />
+                </Label>
+                <Input
+                  id="contactEmail"
+                  name="contactEmail"
+                  type="email"
+                  defaultValue={defaultContact.email}
+                  maxLength={200}
+                  autoComplete="email"
+                />
+                <FieldError errors={fe.contactEmail} />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <HandleInput id="contactX" label="Contact X" placeholder="@you" error={fe.contactX} />
+              <HandleInput id="contactDiscord" label="Contact Discord" placeholder="username" error={fe.contactDiscord} />
+              <HandleInput id="contactTelegram" label="Contact Telegram" placeholder="@you" error={fe.contactTelegram} />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* --- More (optional) --- */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">More numbers</CardTitle>
+            <CardDescription>Optional — some listings score these. Back them up with evidence links.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <StatInput id="communitySize" label="Community size" value={communitySize} onChange={setCommunitySize} error={fe.communitySize} />
+            <div className="grid gap-4 sm:grid-cols-3">
               <StatInput id="twitterFollowers" label="X followers" value={twitterFollowers} onChange={setTwitterFollowers} error={fe.twitterFollowers} />
               <StatInput id="discordMembers" label="Discord members" value={discordMembers} onChange={setDiscordMembers} error={fe.discordMembers} />
               <StatInput id="holderCount" label="Holders" value={holderCount} onChange={setHolderCount} error={fe.holderCount} />
@@ -378,22 +500,32 @@ export function RequestForm({
   );
 }
 
+function Req() {
+  return <span className="text-primary">*</span>;
+}
+
 function StatInput({
   id,
   label,
   value,
   onChange,
   error,
+  required = false,
+  hint,
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
   error?: string[];
+  required?: boolean;
+  hint?: string;
 }) {
   return (
     <div>
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id}>
+        {label} {required && <Req />}
+      </Label>
       <Input
         id={id}
         name={id}
@@ -402,6 +534,17 @@ function StatInput({
         onChange={(e) => onChange(e.target.value.replace(/[^\d,]/g, ""))}
         placeholder="e.g. 12,000"
       />
+      {hint && !error?.length && <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>}
+      <FieldError errors={error} />
+    </div>
+  );
+}
+
+function HandleInput({ id, label, placeholder, error }: { id: string; label: string; placeholder: string; error?: string[] }) {
+  return (
+    <div>
+      <Label htmlFor={id}>{label}</Label>
+      <Input id={id} name={id} placeholder={placeholder} maxLength={64} autoComplete="off" />
       <FieldError errors={error} />
     </div>
   );

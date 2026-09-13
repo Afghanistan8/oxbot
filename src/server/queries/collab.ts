@@ -318,6 +318,7 @@ export type IncomingRequestRow = {
   twitterFollowers: number | null;
   discordMembers: number | null;
   pitch: string;
+  communityName: string | null;
   createdAt: Date;
   requesterTeam: { name: string; slug: string; logoUrl: string | null; xHandle: string | null };
   listing: { id: string; title: string; distributionMethod: DistributionMethod };
@@ -347,6 +348,7 @@ export async function getIncomingRequests(
       twitterFollowers: true,
       discordMembers: true,
       pitch: true,
+      communityName: true,
       createdAt: true,
       requesterTeam: { select: { name: true, slug: true, logoUrl: true, xHandle: true } },
       listing: { select: { id: true, title: true, distributionMethod: true } },
@@ -525,7 +527,17 @@ export type AllocationRow = {
   deliveredAt: Date | null;
   team: { name: string; slug: string; xHandle: string | null; discordInvite: string | null };
   listing: { id: string; title: string; chain: Blockchain };
-  request: { id: string; walletForDelivery: string | null; spotsRequested: number } | null;
+  request: {
+    id: string;
+    walletForDelivery: string | null;
+    spotsRequested: number;
+    communityName: string | null;
+    contactName: string | null;
+    contactEmail: string | null;
+    contactX: string | null;
+    contactDiscord: string | null;
+    contactTelegram: string | null;
+  } | null;
 };
 
 export type TeamPublicRaffleRow = {
@@ -630,7 +642,19 @@ export async function getTeamAllocations(teamId: string, listingId?: string): Pr
       deliveredAt: true,
       team: { select: { name: true, slug: true, xHandle: true, discordInvite: true } },
       listing: { select: { id: true, title: true, chain: true } },
-      request: { select: { id: true, walletForDelivery: true, spotsRequested: true } },
+      request: {
+        select: {
+          id: true,
+          walletForDelivery: true,
+          spotsRequested: true,
+          communityName: true,
+          contactName: true,
+          contactEmail: true,
+          contactX: true,
+          contactDiscord: true,
+          contactTelegram: true,
+        },
+      },
     },
   });
   return rows.map((r) => ({ ...r, wallets: parseWallets(r.wallets) }));

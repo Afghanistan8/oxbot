@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { ALL_CHAINS } from "@/lib/constants";
+import { cleanHandle, normalizeCommunityLink, type CommunityPlatform } from "@/lib/collab/socials";
 import type { AssetType, Blockchain, DistributionMethod } from "@prisma/client";
 
 /**
@@ -138,12 +139,54 @@ const optionalCount = z
     return n;
   });
 
-export const requestFormSchema = z.object({
+const requiredCount = (message: string) =>
+  optionalCount.refine((v): v is number => v !== null, { message });
+
+const communityLink = (platform: CommunityPlatform) =>
+  z
+    .string()
+    .max(300)
+    .optional()
+    .or(z.literal(""))
+    .transform((v, ctx) => {
+      const out = normalizeCommunityLink(platform, v);
+      if (out && typeof out === "object") {
+        ctx.addIssue({ code: "custom", message: out.error });
+        return z.NEVER;
+      }
+      return out;
+    });
+
+const contactHandle = z
+  .string()
+  .trim()
+  .max(64)
+  .regex(/^@?[A-Za-z0-9_.#-]*$/, "Letters, numbers, _ . - only.")
+  .optional()
+  .or(z.literal(""))
+  .transform((v) => cleanHandle(v));
+
+export const requestFormSchema = z
+  .object({
   requesterTeamId: z.string().trim().min(1, "Pick which project is requesting."),
-  spotsRequested: z.coerce.number().int("Whole numbers only.").min(1, "Request at least 1 spot.").max(100_000),
+  spotsRequested: z.coerce.number().int("Whole numbers only.").min(1, "Request at least 1 WL spot.").max(100_000),
   pitch: z.string().trim().min(20, "Tell them why — at least a couple of sentences.").max(4000),
   audienceSummary: optionalText(2000),
-  communitySize: optionalCount,
+  // Community
+  communityName: z.string().trim().min(2, "Enter your community's name.").max(80),
+  communityX: communityLink("x"),
+  communityDiscord: communityLink("discord"),
+  communityTelegram: communityLink("telegram"),
+  communityTiktok: communityLink("tiktok"),
+  communityInstagram: communityLink("instagram"),
+  reportedRaffleEntries: requiredCount("Enter how many raffle entries your community drives (0 is fine)."),
+  // How to reach you
+  contactName: z.string().trim().min(2, "Enter a contact name.").max(80),
+  contactEmail: z.string().trim().toLowerCase().email("Enter a valid email.").max(200),
+  contactX: contactHandle,
+  contactDiscord: contactHandle,
+  contactTelegram: contactHandle,
+  communitySize: requiredCount("Enter your community size."),
   holderCount: optionalCount,
   twitterFollowers: optionalCount,
   discordMembers: optionalCount,
@@ -153,7 +196,11 @@ export const requestFormSchema = z.object({
   attestations: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
   walletForDelivery: optionalText(120),
   deliveryChain: chainEnum.optional().or(z.literal("")),
-});
+  })
+  .refine(
+    (d) => Boolean(d.communityX || d.communityDiscord || d.communityTelegram || d.communityTiktok || d.communityInstagram),
+    { message: "Add at least one community link.", path: ["communityLinks"] }
+  );
 
 export type RequestFormInput = z.infer<typeof requestFormSchema>;
 

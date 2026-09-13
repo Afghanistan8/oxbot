@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { getCurrentUserId } from "@/lib/session";
+import { db } from "@/lib/db";
 import { absoluteUrl } from "@/lib/utils";
 import { joinCollabPath } from "@/lib/collab/host";
 import { collabSignInHref, getCollabSurface } from "@/lib/collab/surface";
@@ -21,7 +22,10 @@ export default async function RequestAllocationPage({ params }: { params: Promis
 
   if (!viewerId) redirect(await collabSignInHref(`/listings/${slug}/request`));
 
-  const listing = await getPublicListing(slug, viewerId);
+  const [listing, viewer] = await Promise.all([
+    getPublicListing(slug, viewerId),
+    db.user.findUnique({ where: { id: viewerId }, select: { name: true, email: true } }),
+  ]);
   if (!listing) notFound();
   if (listing.viewerIsOwner || listing.requesterTeams.length === 0) redirect(listingHref);
 
@@ -67,6 +71,7 @@ export default async function RequestAllocationPage({ params }: { params: Promis
           dashboardBase={surface.onCollabHost ? absoluteUrl("").replace(/\/$/, "") : ""}
           listingHref={listingHref}
           blockedReason={blockedReason}
+          defaultContact={{ name: viewer?.name ?? "", email: viewer?.email ?? "" }}
         />
       </div>
     </main>

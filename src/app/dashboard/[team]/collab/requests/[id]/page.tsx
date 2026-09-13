@@ -6,6 +6,7 @@ import { resolveTeamPage } from "@/server/queries/require-team-page";
 import { getIncomingRequest } from "@/server/queries/collab";
 import { ALLOCATION_STATUS_META, OPEN_REQUEST_STATUSES, REQUEST_STATUS_META } from "@/lib/collab/constants";
 import { CHAIN_META } from "@/lib/constants";
+import { COMMUNITY_PLATFORMS } from "@/lib/collab/socials";
 import { formatNumber, shortenAddress } from "@/lib/utils";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { LocalTime } from "@/components/local-time";
@@ -72,6 +73,53 @@ export default async function ReviewRequestPage({ params }: { params: Promise<{ 
 
           <Card>
             <CardHeader>
+              <CardTitle className="text-base">Community</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <p className="font-display text-lg font-semibold text-white">{r.communityName ?? r.requesterTeam.name}</p>
+                <div className="flex flex-wrap gap-2">
+                  {COMMUNITY_PLATFORMS.map((p) => {
+                    const url = r[p.field];
+                    return url ? <Chip key={p.key} href={url} icon={p.key === "discord" ? MessageCircle : Globe} label={p.label} /> : null;
+                  })}
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <Mini label="Community size" value={stat(r.communitySize)} />
+                <Mini label="Raffle entries" value={stat(r.reportedRaffleEntries)} />
+                <Mini label="WL requested" value={stat(r.spotsRequested)} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">How to reach them</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
+              <ContactRow label="Name" value={r.contactName} />
+              <ContactRow
+                label="Email"
+                value={r.contactEmail}
+                href={r.contactEmail ? `mailto:${r.contactEmail}` : undefined}
+              />
+              <ContactRow
+                label="X"
+                value={r.contactX ? `@${r.contactX}` : null}
+                href={r.contactX ? `https://x.com/${encodeURIComponent(r.contactX)}` : undefined}
+              />
+              <ContactRow label="Discord" value={r.contactDiscord} />
+              <ContactRow
+                label="Telegram"
+                value={r.contactTelegram ? `@${r.contactTelegram}` : null}
+                href={r.contactTelegram ? `https://t.me/${encodeURIComponent(r.contactTelegram)}` : undefined}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle className="text-base">Pitch</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -87,11 +135,10 @@ export default async function ReviewRequestPage({ params }: { params: Promise<{ 
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Numbers</CardTitle>
+              <CardTitle className="text-base">More numbers</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Mini label="Community" value={stat(r.communitySize)} />
+              <div className="grid grid-cols-3 gap-3">
                 <Mini label="X followers" value={stat(r.twitterFollowers)} />
                 <Mini label="Discord" value={stat(r.discordMembers)} />
                 <Mini label="Holders" value={stat(r.holderCount)} />
@@ -221,6 +268,25 @@ function Mini({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl border border-border bg-card/40 px-4 py-3">
       <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className="mt-1 font-display text-lg font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+function ContactRow({ label, value, href }: { label: string; value: string | null; href?: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-card/40 px-4 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      {value ? (
+        href ? (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="mt-1 block truncate font-medium text-scarlet-soft hover:text-white">
+            {value}
+          </a>
+        ) : (
+          <p className="mt-1 truncate font-medium text-white">{value}</p>
+        )
+      ) : (
+        <p className="mt-1 text-muted-foreground">—</p>
+      )}
     </div>
   );
 }
