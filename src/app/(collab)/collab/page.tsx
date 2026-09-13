@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Handshake, Layers, Radio, ShieldCheck, Ticket } from "lucide-react";
+import { ArrowRight, Handshake, Layers, Radio, ShieldCheck, Sparkles, Ticket } from "lucide-react";
 
 import { brandCollab } from "@/lib/brand-collab";
 import { auth } from "@/lib/auth";
@@ -211,7 +211,7 @@ function Hero({
             <div className="glass-red absolute inset-12 rounded-3xl shadow-card" />
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="grid h-24 w-24 place-items-center rounded-3xl bg-crimson-gradient shadow-glow-red-lg">
-                <Handshake className="h-10 w-10 text-white" />
+                <Sparkles className="h-10 w-10 text-white" />
               </div>
             </div>
           </div>

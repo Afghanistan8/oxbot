@@ -31,7 +31,12 @@ export async function CollabFooter() {
       <div className="container py-12">
         <div className="flex flex-col gap-10 md:flex-row md:justify-between">
           <div className="max-w-xs space-y-3">
-            <Logo product="collab" href={href("/")} />
+            <div className="flex items-center gap-3">
+              <Logo href={href("/")} />
+              <span className="rounded-md border border-border/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Collab
+              </span>
+            </div>
             <p className="text-sm text-muted-foreground">{brandCollab.tagline}</p>
           </div>
 

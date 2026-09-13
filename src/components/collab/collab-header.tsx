@@ -36,7 +36,10 @@ export async function CollabHeader() {
       <div className="container grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-4">
         <div className="flex min-w-0 items-center gap-2">
           <CollabHeaderMobileMenu links={links} deskHref={deskHref} oxbotHref={oxbotHref} />
-          <Logo product="collab" href={href("/")} className="[&>span:last-child]:hidden sm:[&>span:last-child]:inline" />
+          <Logo href={href("/")} />
+          <span className="hidden rounded-md border border-border/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:inline">
+            Collab
+          </span>
         </div>
 
         <nav className="hidden items-center gap-1 md:flex">
