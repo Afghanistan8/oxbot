@@ -106,12 +106,12 @@ export const inviteMemberSchema = z.object({
         .max(32)
         .regex(/^[a-z0-9._]+$/, "That doesn't look like a Discord username.")
     ),
-  role: z.enum(["ADMIN", "EDITOR", "COLLAB_MANAGER"]),
+  role: z.enum(["ADMIN", "COLLAB_MANAGER"]),
 });
 
 export const changeRoleSchema = z.object({
   memberId: z.string().min(1),
-  role: z.enum(["OWNER", "ADMIN", "EDITOR", "COLLAB_MANAGER"]),
+  role: z.enum(["OWNER", "ADMIN", "COLLAB_MANAGER"]),
 });
 
 export type CreateTeamInput = z.infer<typeof createTeamSchema>;

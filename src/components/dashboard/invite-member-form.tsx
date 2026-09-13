@@ -55,13 +55,12 @@ export function InviteMemberForm({ teamId }: { teamId: string }) {
       </div>
       <div className="sm:w-44">
         <Label htmlFor="invite-role">Role</Label>
-        <Select name="role" defaultValue="EDITOR">
+        <Select name="role" defaultValue="COLLAB_MANAGER">
           <SelectTrigger id="invite-role">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ADMIN">{ROLE_META.ADMIN.label}</SelectItem>
-            <SelectItem value="EDITOR">{ROLE_META.EDITOR.label}</SelectItem>
             <SelectItem value="COLLAB_MANAGER">{ROLE_META.COLLAB_MANAGER.label}</SelectItem>
           </SelectContent>
         </Select>

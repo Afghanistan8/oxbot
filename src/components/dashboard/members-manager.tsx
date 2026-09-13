@@ -139,8 +139,8 @@ function MemberRow({
 
   const roleOptions: TeamRole[] =
     viewerRole === "OWNER"
-      ? ["OWNER", "ADMIN", "EDITOR", "COLLAB_MANAGER"]
-      : ["ADMIN", "EDITOR", "COLLAB_MANAGER"];
+      ? ["OWNER", "ADMIN", "COLLAB_MANAGER"]
+      : ["ADMIN", "COLLAB_MANAGER"];
 
   function onRoleChange(role: string) {
     startTransition(async () => {

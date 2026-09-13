@@ -62,9 +62,8 @@ export default async function MembersPage({
             <CardTitle className="text-base">Add a teammate</CardTitle>
             <CardDescription>
               Add someone by their Discord username — they must already have an
-              oxbot account. Admins manage members &amp; settings; Raffle
-              Managers run giveaways; Collab Managers are limited to whitelist
-              raffles &amp; collabs.
+              oxbot account. Admins manage members, settings &amp; giveaways;
+              Collab Managers are limited to whitelist raffles &amp; collabs.
             </CardDescription>
           </CardHeader>
           <CardContent>
