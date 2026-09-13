@@ -528,6 +528,92 @@ export type AllocationRow = {
   request: { id: string; walletForDelivery: string | null; spotsRequested: number } | null;
 };
 
+export type TeamPublicRaffleRow = {
+  listing: {
+    id: string;
+    slug: string;
+    title: string;
+    assetType: AssetType;
+    chain: Blockchain;
+    collectionAddress: string | null;
+    collectionName: string | null;
+    tokenAddress: string | null;
+    tokenSymbol: string | null;
+    publicSpots: number;
+    status: ListingStatus;
+    startAt: Date;
+    endAt: Date;
+  };
+  raffle: {
+    id: string;
+    slug: string;
+    title: string;
+    type: import("@prisma/client").GiveawayType;
+    status: GiveawayStatus;
+    startAt: Date;
+    endAt: Date;
+    winnersCount: number;
+    fcfsCursor: number;
+    entryCount: number;
+    winnerCount: number;
+  } | null;
+};
+
+/** Listings with a public slice, and the raffle (if opened) for each. */
+export async function getTeamPublicRaffles(teamId: string): Promise<TeamPublicRaffleRow[]> {
+  const rows = await db.whitelistListing.findMany({
+    where: { teamId, status: { not: "CANCELLED" }, OR: [{ publicSpots: { gt: 0 } }, { publicRaffle: { isNot: null } }] },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      assetType: true,
+      chain: true,
+      collectionAddress: true,
+      collectionName: true,
+      tokenAddress: true,
+      tokenSymbol: true,
+      publicSpots: true,
+      status: true,
+      startAt: true,
+      endAt: true,
+      publicRaffle: {
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          type: true,
+          status: true,
+          startAt: true,
+          endAt: true,
+          winnersCount: true,
+          fcfsCursor: true,
+          _count: { select: { entries: true, winners: true } },
+        },
+      },
+    },
+  });
+  return rows.map(({ publicRaffle, ...listing }) => ({
+    listing,
+    raffle: publicRaffle
+      ? {
+          id: publicRaffle.id,
+          slug: publicRaffle.slug,
+          title: publicRaffle.title,
+          type: publicRaffle.type,
+          status: publicRaffle.status,
+          startAt: publicRaffle.startAt,
+          endAt: publicRaffle.endAt,
+          winnersCount: publicRaffle.winnersCount,
+          fcfsCursor: publicRaffle.fcfsCursor,
+          entryCount: publicRaffle._count.entries,
+          winnerCount: publicRaffle._count.winners,
+        }
+      : null,
+  }));
+}
+
 /** Granted allocations on a team's listings (optionally one listing), newest first. */
 export async function getTeamAllocations(teamId: string, listingId?: string): Promise<AllocationRow[]> {
   const rows = await db.collabAllocation.findMany({

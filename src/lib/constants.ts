@@ -158,6 +158,9 @@ export const REQUIREMENT_META: Record<
 /** Requirement types verified against an on-chain wallet balance. */
 export const HOLDING_REQUIREMENTS: RequirementType[] = ["NFT_HOLD", "TOKEN_BALANCE"];
 
+/** EVM chains — one 0x address works across all of them. */
+export const EVM_CHAINS: Blockchain[] = ["ETHEREUM", "BASE", "ARBITRUM", "POLYGON", "ROBINHOOD", "HYPERLIQUID"];
+
 /** Requirement types that involve X (Twitter). */
 export const TWITTER_REQUIREMENTS: RequirementType[] = [
   "TWITTER_FOLLOW",

@@ -171,6 +171,7 @@ async function performDraw(
 
   revalidatePath(`/dashboard/${giveaway.team.slug}/giveaways/${giveaway.id}`);
   revalidatePath(`/giveaways/${giveaway.slug}`);
+  revalidatePath(`/collab/raffles/${giveaway.slug}`);
   revalidatePath("/");
 
   const count = selected.length;

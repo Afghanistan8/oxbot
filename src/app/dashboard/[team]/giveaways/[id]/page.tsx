@@ -315,6 +315,15 @@ function requirementDetail(r: ManagedRequirement): string {
       return c.caseSensitive ? " — case-sensitive" : "";
     case "WALLET":
       return typeof c.chain === "string" && c.chain ? ` — ${c.chain}` : "";
+    case "NFT_HOLD": {
+      const n = typeof c.minCount === "number" ? c.minCount : 1;
+      const name = typeof c.label === "string" && c.label ? c.label : "collection";
+      return ` — ${n}+ ${name}${typeof c.chain === "string" ? ` on ${c.chain}` : ""}`;
+    }
+    case "TOKEN_BALANCE": {
+      const name = typeof c.label === "string" && c.label ? c.label : "tokens";
+      return ` — ${typeof c.minBalance === "string" ? c.minBalance : ""} ${name}${typeof c.chain === "string" ? ` on ${c.chain}` : ""}`;
+    }
     default:
       return "";
   }

@@ -9,7 +9,10 @@ import { requireUserId } from "@/lib/session";
 import { requireTeamRole, AuthzError } from "@/lib/authz";
 import { recordAudit } from "@/lib/audit";
 import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
-import { uniqueListingSlug } from "@/lib/slug";
+import { uniqueGiveawaySlug, uniqueListingSlug } from "@/lib/slug";
+import { FCFS_SENTINEL_END_AT } from "@/lib/format";
+import { requirementSchema } from "@/lib/validation/giveaway";
+import { publishGiveawayAction } from "@/server/actions/giveaway";
 import {
   InventoryError,
   assertCapacity,
@@ -981,4 +984,143 @@ export async function setAllocationStatusAction(
     const messages = { CONFIRMED: "Allocation confirmed.", DELIVERED: "Marked as delivered.", REVOKED: "Allocation revoked — spots returned to inventory." };
     return ok(undefined, messages[target]);
   });
+}
+
+// --- Public whitelist raffle (a normal giveaway linked to the listing) --------
+
+const publicRaffleSchema = z
+  .object({
+    type: z.enum(["RANDOM", "FCFS"]),
+    startAt: z.coerce.date({ message: "Pick a start time." }),
+    endAt: z.coerce.date({ message: "Pick an end time." }),
+    requirements: z.array(requirementSchema).max(12).default([]),
+  })
+  .refine((d) => d.type === "FCFS" || d.endAt.getTime() > d.startAt.getTime(), {
+    message: "The raffle must end after it starts.",
+    path: ["endAt"],
+  });
+
+/**
+ * Open the public raffle for a listing's `publicSpots`: creates a Giveaway
+ * linked by `listingId` (winners = public spots, prize "GTD whitelist x N")
+ * that runs on the existing entry engine, seeded draw and winners export.
+ * Publishing goes through the standard giveaway publish action so the Discord
+ * announcement and audit trail are identical to any other giveaway.
+ */
+export async function openPublicRaffleAction(
+  listingId: string,
+  _prev: unknown,
+  formData: FormData
+): Promise<ActionState<{ giveawayId: string; teamSlug: string }>> {
+  const userId = await requireUserId();
+  const publish = formData.get("publish") === "true";
+
+  const result = await runAction<{ giveawayId: string; teamSlug: string }>(async () => {
+    checkMutateLimit(userId);
+    const listing = await db.whitelistListing.findUnique({
+      where: { id: listingId },
+      include: {
+        team: { select: { id: true, slug: true, name: true, xHandle: true, discordGuildId: true, bannerUrl: true } },
+        publicRaffle: { select: { id: true } },
+      },
+    });
+    if (!listing) return fail("Listing not found.");
+    await requireTeamRole(userId, listing.teamId, "EDITOR");
+
+    if (listing.status === "CANCELLED") return fail("This listing was cancelled.");
+    if (listing.publicRaffle) return fail("This listing already has a public raffle.");
+    if (listing.publicSpots < 1) {
+      return fail("Set aside public spots on the listing first (Edit → Spots → Public raffle slice).");
+    }
+
+    const parsed = publicRaffleSchema.safeParse({
+      type: formData.get("type"),
+      startAt: formData.get("startAt"),
+      endAt: formData.get("endAt"),
+      requirements: parseJsonField(formData, "requirements") ?? [],
+    });
+    if (!parsed.success) return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
+    const data = parsed.data;
+    const endAt = data.type === "FCFS" ? FCFS_SENTINEL_END_AT : data.endAt;
+    if (publish && endAt.getTime() <= Date.now()) {
+      return fail("The raffle must end in the future to publish.", { endAt: ["Pick a future end time."] });
+    }
+
+    const usesDiscord = data.requirements.some((r) => r.type === "DISCORD_MEMBER" || r.type === "DISCORD_ROLE");
+    if (usesDiscord && !listing.team.discordGuildId) {
+      return fail("Link your Discord server in project settings to use a Discord task.");
+    }
+
+    const spots = listing.publicSpots;
+    const slug = await uniqueGiveawaySlug(`${listing.team.name} public wl`);
+    const giveaway = await db.giveaway.create({
+      data: {
+        teamId: listing.teamId,
+        listingId: listing.id,
+        slug,
+        title: `${listing.team.name} Public WL`,
+        description: [
+          `${spots} guaranteed whitelist spot${spots === 1 ? "" : "s"} for ${listing.collectionName ?? listing.tokenSymbol ?? listing.title}, open to everyone.`,
+          listing.description,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        prize: `GTD whitelist x ${spots}`,
+        bannerUrl: listing.bannerUrl ?? listing.team.bannerUrl,
+        type: data.type,
+        status: "DRAFT",
+        visibility: "PUBLIC",
+        chain: listing.chain,
+        winnersCount: spots,
+        startAt: data.startAt,
+        endAt,
+        xAccount: listing.team.xHandle,
+        discordServerId: listing.team.discordGuildId,
+        createdById: userId,
+        requirements: {
+          create: data.requirements.map((r, i) => {
+            const { type, required, ...rest } = r;
+            const config: Record<string, unknown> = { ...rest };
+            if (type === "TWITTER_FOLLOW" && typeof config.handle === "string") {
+              config.handle = config.handle.replace(/^@/, "");
+            }
+            return { type, required: required ?? true, order: i, config: config as Prisma.InputJsonValue };
+          }),
+        },
+      },
+    });
+
+    await Promise.all([
+      recordAudit({
+        teamId: listing.teamId,
+        actorId: userId,
+        action: "listing.raffle_open",
+        target: listing.id,
+        meta: { giveawayId: giveaway.id, spots, type: data.type, tasks: data.requirements.map((r) => r.type) },
+      }),
+      recordAudit({
+        teamId: listing.teamId,
+        actorId: userId,
+        action: "giveaway.create",
+        target: giveaway.id,
+        meta: { title: giveaway.title, type: giveaway.type, listingId: listing.id, published: publish },
+      }),
+    ]);
+
+    if (publish) {
+      const published = await publishGiveawayAction(giveaway.id);
+      if (!published.ok) {
+        return fail(`Raffle created as a draft, but publishing failed: ${published.error ?? "unknown error"}`);
+      }
+    }
+
+    revalidateListing(listing.team.slug, listing);
+    revalidatePath(`/dashboard/${listing.team.slug}/giveaways`);
+    return ok({ giveawayId: giveaway.id, teamSlug: listing.team.slug });
+  });
+
+  if (result.ok && result.data) {
+    redirect(`/dashboard/${result.data.teamSlug}/giveaways/${result.data.giveawayId}`);
+  }
+  return result;
 }

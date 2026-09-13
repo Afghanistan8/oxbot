@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Calendar, ExternalLink, Inbox, ListChecks, Lock, Pencil, StickyNote } from "lucide-react";
+import { ArrowLeft, Calendar, ExternalLink, Inbox, ListChecks, Lock, Pencil, StickyNote, Ticket } from "lucide-react";
 
 import { resolveTeamPage } from "@/server/queries/require-team-page";
 import { getManagedListing } from "@/server/queries/collab";
@@ -110,6 +110,27 @@ export default async function ManageListingPage({ params }: { params: Promise<{ 
               <p className="text-xs text-muted-foreground">
                 Partners may request {formatNumber(listing.spotsPerRequestMin)}–{formatNumber(listing.spotsPerRequestMax)} spots each.
               </p>
+              {(listing.publicSpots > 0 || listing.publicRaffle) && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gold/25 bg-gold/[0.06] px-4 py-3">
+                  <p className="flex items-center gap-2 text-sm text-gold">
+                    <Ticket className="h-4 w-4" />
+                    {listing.publicRaffle
+                      ? `Public raffle · ${listing.publicRaffle.status.toLowerCase()}`
+                      : `${formatNumber(listing.publicSpots)} public spots waiting for a raffle`}
+                  </p>
+                  <Button asChild size="sm" variant={listing.publicRaffle ? "outline" : "gold"}>
+                    <Link
+                      href={
+                        listing.publicRaffle
+                          ? `/dashboard/${slug}/giveaways/${listing.publicRaffle.id}`
+                          : `${base}/raffles`
+                      }
+                    >
+                      {listing.publicRaffle ? "Manage raffle" : "Open raffle"}
+                    </Link>
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
 
