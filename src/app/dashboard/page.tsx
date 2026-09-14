@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 /**
  * Dashboard index — lists the user's projects (teams). New users (no project
  * yet) get a bold "you have options" welcome that spells out both ways to use
- * oxbot; returning users get their project grid with a Collab-desk nudge.
+ * oxbot, plus a no-profile path for people who only want to enter giveaways.
  */
 export default async function DashboardHome() {
   const user = await requireUser("/dashboard");
@@ -32,8 +32,6 @@ export default async function DashboardHome() {
           </Link>
         </Button>
       </PageHeader>
-
-      <CollabNudge />
 
       <div className="grid gap-4 sm:grid-cols-2">
         {teams.map((team) => (
@@ -82,33 +80,6 @@ export default async function DashboardHome() {
         ))}
       </div>
     </>
-  );
-}
-
-/**
- * Slim, always-on reminder for founders/collab managers who already have a
- * project: they can also request whitelist spots for their community on the
- * Collab desk. Keeps the "you have options" idea discoverable after onboarding.
- */
-function CollabNudge() {
-  return (
-    <Link
-      href="/collab/listings"
-      className="group mb-6 flex items-center gap-3 rounded-2xl border border-gold/30 bg-gold/[0.06] px-5 py-4 transition-colors hover:border-gold/60"
-    >
-      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gold/15 text-gold">
-        <Handshake className="h-5 w-5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-white">
-          Want whitelist spots for your community?
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Browse the Collab desk and request allocations from listed NFT &amp; token projects.
-        </p>
-      </div>
-      <ArrowRight className="h-4 w-4 shrink-0 text-gold transition-transform group-hover:translate-x-0.5" />
-    </Link>
   );
 }
 
@@ -164,19 +135,24 @@ function WelcomeOptions() {
       </div>
 
       {/* Primary action */}
-      <div className="mt-8 flex flex-col items-center gap-3">
+      <div className="mt-8 flex flex-col items-center gap-4">
         <Button asChild size="lg" className="w-full sm:w-auto">
           <Link href="/dashboard/new">
             <Plus className="h-4 w-4" />
             Create your community profile
           </Link>
         </Button>
-        <Link
-          href="/collab/listings"
-          className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-scarlet-soft hover:underline"
-        >
-          Just browsing? See open whitelist listings →
-        </Link>
+        {/* No-profile path — entering giveaways never requires one. */}
+        <p className="text-center text-sm text-muted-foreground">
+          Just want to enter giveaways? You don&apos;t need a community profile —{" "}
+          <Link
+            href="/"
+            className="font-medium text-scarlet-soft underline-offset-4 hover:text-white hover:underline"
+          >
+            browse giveaways
+          </Link>
+          .
+        </p>
       </div>
     </div>
   );
