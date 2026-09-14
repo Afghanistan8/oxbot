@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, ExternalLink, Inbox, Layers, Plus, Send, Ticket } from "lucide-react";
+import { ArrowRight, ExternalLink, Inbox, Layers, Plus, Send } from "lucide-react";
 
 import { resolveTeamPage } from "@/server/queries/require-team-page";
 import { getCollabOverview, getIncomingRequests, getTeamListings } from "@/server/queries/collab";
@@ -17,8 +17,8 @@ export async function generateMetadata({ params }: { params: Promise<{ team: str
 }
 
 /**
- * Collab desk overview — inventory, incoming + outgoing requests, and public
- * raffles at a glance. Any member can view.
+ * Collab desk overview — inventory, incoming + outgoing requests at a glance.
+ * Any member can view.
  */
 export default async function CollabOverviewPage({ params }: { params: Promise<{ team: string }> }) {
   const { team: slug } = await params;
@@ -34,7 +34,7 @@ export default async function CollabOverviewPage({ params }: { params: Promise<{
 
   return (
     <>
-      <PageHeader title="Collab desk" description="Whitelist inventory, partner requests, and public raffles.">
+      <PageHeader title="Collab desk" description="Whitelist inventory and partner requests.">
         <Button asChild variant="outline" size="sm">
           <a href={collabEntryUrl("/listings")} target="_blank" rel="noopener noreferrer">
             <ExternalLink className="h-4 w-4" />
@@ -49,7 +49,7 @@ export default async function CollabOverviewPage({ params }: { params: Promise<{
         </Button>
       </PageHeader>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <StatCard
           icon={Layers}
           label="Open listings"
@@ -70,13 +70,6 @@ export default async function CollabOverviewPage({ params }: { params: Promise<{
           value={formatNumber(overview.outgoing.open)}
           sub={`${formatNumber(overview.outgoing.approvedSpots)} spots received`}
           href={`${base}/outgoing`}
-        />
-        <StatCard
-          icon={Ticket}
-          label="Live raffles"
-          value={formatNumber(overview.publicRaffles.live)}
-          sub={`${formatNumber(overview.spots.public)} public spots`}
-          href={`${base}/raffles`}
         />
       </div>
 
@@ -111,7 +104,7 @@ export default async function CollabOverviewPage({ params }: { params: Promise<{
           <CollabEmptyState
             icon={Layers}
             title="Nothing listed yet"
-            body="Post whitelist spots for partner communities — and carve out a public raffle if you want one."
+            body="Post whitelist spots for partner communities to request."
             action={{ href: `${base}/listings/new`, label: "List inventory" }}
           />
         )}

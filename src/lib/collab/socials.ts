@@ -1,39 +1,36 @@
+import type { ContactMethod } from "@prisma/client";
+
 /**
- * Community link normalization for partner requests. Client-safe.
+ * Community link + contact normalization for partner requests. Client-safe.
  *
- * Requesters can paste a full URL or just a handle; everything is stored as an
- * https URL on the platform's own domain, so reviewers only ever get links to
- * X / Discord / Telegram / TikTok / Instagram — never an arbitrary site.
+ * Requesters can paste a full URL or just a handle; community links are stored
+ * as https URLs on the platform's own domain, so reviewers only ever get links
+ * to X / Discord / Telegram — never an arbitrary site.
  */
 
-export type CommunityPlatform = "x" | "discord" | "telegram" | "tiktok" | "instagram";
+export type CommunityPlatform = "x" | "discord" | "telegram";
 
 export const COMMUNITY_PLATFORMS: {
   key: CommunityPlatform;
-  field: "communityX" | "communityDiscord" | "communityTelegram" | "communityTiktok" | "communityInstagram";
+  field: "communityX" | "communityDiscord" | "communityTelegram";
   label: string;
   placeholder: string;
+  required: boolean;
 }[] = [
-  { key: "x", field: "communityX", label: "X", placeholder: "@community or x.com/community" },
-  { key: "discord", field: "communityDiscord", label: "Discord", placeholder: "discord.gg/invite" },
-  { key: "telegram", field: "communityTelegram", label: "Telegram", placeholder: "@group or t.me/group" },
-  { key: "tiktok", field: "communityTiktok", label: "TikTok", placeholder: "@community or tiktok.com/@community" },
-  { key: "instagram", field: "communityInstagram", label: "Instagram", placeholder: "@community or instagram.com/community" },
+  { key: "x", field: "communityX", label: "X", placeholder: "@community or x.com/community", required: true },
+  { key: "discord", field: "communityDiscord", label: "Discord", placeholder: "discord.gg/invite", required: false },
+  { key: "telegram", field: "communityTelegram", label: "Telegram", placeholder: "@group or t.me/group", required: false },
 ];
 
 const HOSTS: Record<CommunityPlatform, string[]> = {
   x: ["x.com", "twitter.com"],
   discord: ["discord.gg", "discord.com", "discordapp.com"],
   telegram: ["t.me", "telegram.me"],
-  tiktok: ["tiktok.com"],
-  instagram: ["instagram.com"],
 };
 
 const HANDLE_URL: Partial<Record<CommunityPlatform, (h: string) => string>> = {
   x: (h) => `https://x.com/${h}`,
   telegram: (h) => `https://t.me/${h}`,
-  tiktok: (h) => `https://www.tiktok.com/@${h}`,
-  instagram: (h) => `https://www.instagram.com/${h}`,
 };
 
 /**
@@ -72,8 +69,26 @@ export function normalizeCommunityLink(
   }
 }
 
-/** Strip a leading @ and whitespace from a contact handle. */
+/** Strip a leading @ and whitespace from a handle (contact or community). */
 export function cleanHandle(raw: string | null | undefined): string | null {
   const v = (raw ?? "").trim().replace(/^@/, "");
   return v ? v : null;
+}
+
+// --- Contact method (how a requester can be reached if approved) -----------
+
+export const CONTACT_METHODS: { key: ContactMethod; label: string; placeholder: string; linkPrefix: string }[] = [
+  { key: "X", label: "X (Twitter)", placeholder: "yourhandle", linkPrefix: "https://x.com/" },
+  { key: "DISCORD", label: "Discord", placeholder: "username", linkPrefix: "" },
+  { key: "TELEGRAM", label: "Telegram", placeholder: "yourhandle", linkPrefix: "https://t.me/" },
+];
+
+export function contactMethodMeta(method: ContactMethod) {
+  return CONTACT_METHODS.find((m) => m.key === method) ?? CONTACT_METHODS[0]!;
+}
+
+/** A clickable link for a contact handle, or null when the method has none (Discord). */
+export function contactLink(method: ContactMethod, handle: string): string | null {
+  const prefix = contactMethodMeta(method).linkPrefix;
+  return prefix ? `${prefix}${handle}` : null;
 }

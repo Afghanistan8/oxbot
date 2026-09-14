@@ -14,7 +14,6 @@
  */
 import { PrismaClient, type Prisma } from "@prisma/client";
 import { generateUniqueCodes } from "../src/lib/giveaway/codes";
-import { evaluateEligibility, type CriteriaInput } from "../src/lib/collab/eligibility";
 
 const db = new PrismaClient();
 
@@ -283,11 +282,10 @@ main()
 // ---------------------------------------------------------------------------
 // OxFoxes Collab demo data
 //
-//  - "Lava Foxes" lists 200 GTD spots (CRITERIA) with a 40-spot public raffle
-//  - "Arch DAO" requests 25 spots (meets criteria → under review)
-//  - "Small Labs" requests 40 spots (below criteria → flagged)
-//  - "Lava Foxes Public WL" raffle: X follow + NFT hold, linked to the listing
-//  - an FCFS listing with 10 spots, 7 already reserved for Arch DAO
+//  - "Lava Foxes" lists 200 GTD spots
+//  - "Arch DAO" and "Small Labs" each file a request through the fixed intake form
+//  - a platform admin adds a request for a project with no oxbot account
+//  - a second listing with 10 spots, 7 already reserved and delivered to Arch DAO
 //
 // Slugs carry a -demo suffix so they can never collide with a real project.
 // ---------------------------------------------------------------------------
@@ -347,18 +345,6 @@ async function seedCollab(founderId: string) {
     primaryChain: "SOLANA",
   });
 
-  const criteria: CriteriaInput = {
-    minCommunitySize: 5000,
-    minHolderCount: null,
-    minTwitterFollowers: 3000,
-    minDiscordMembers: 1000,
-    minRaffleEntries: null,
-    requiredChains: ["ETHEREUM"],
-    requiredAssetType: null,
-    requireVerifiedTeam: false,
-    customRules: [{ id: "doxxed", label: "Team is doxxed or KYC verified" }],
-  };
-
   const listing = await db.whitelistListing.upsert({
     where: { slug: "lava-foxes-gtd-demo" },
     update: {},
@@ -375,46 +361,15 @@ async function seedCollab(founderId: string) {
       collectionAddress: "0x0000000000000000000000000000000000001a7a",
       mintOrTgeAt: daysFromNow(21),
       totalSpots: 200,
-      publicSpots: 40,
       spotsPerRequestMin: 5,
       spotsPerRequestMax: 50,
-      distributionMethod: "CRITERIA",
       status: "OPEN",
       startAt: daysFromNow(-2),
       endAt: daysFromNow(10),
       createdById: lava.owner.id,
-      criteria: {
-        create: {
-          ...criteria,
-          customRules: criteria.customRules as unknown as Prisma.InputJsonValue,
-        },
-      },
     },
   });
-  console.log(`  ✓ Collab listing: ${listing.title} (200 spots, 40 public)`);
-
-  const archEval = evaluateEligibility(criteria, {
-    communitySize: 18000,
-    holderCount: 2400,
-    twitterFollowers: 12000,
-    discordMembers: 6500,
-    raffleEntries: 0,
-    chains: ["ETHEREUM", "BASE"],
-    assetType: null,
-    verifiedTeam: false,
-    attestations: { doxxed: true },
-  });
-  const smallEval = evaluateEligibility(criteria, {
-    communitySize: 900,
-    holderCount: 120,
-    twitterFollowers: 700,
-    discordMembers: 300,
-    raffleEntries: 0,
-    chains: ["SOLANA"],
-    assetType: null,
-    verifiedTeam: false,
-    attestations: {},
-  });
+  console.log(`  ✓ Collab listing: ${listing.title} (200 spots)`);
 
   if ((await db.collabRequest.count({ where: { listingId: listing.id } })) === 0) {
     await db.collabRequest.create({
@@ -422,22 +377,16 @@ async function seedCollab(founderId: string) {
         listingId: listing.id,
         requesterTeamId: arch.team.id,
         submittedById: arch.owner.id,
-        status: archEval.eligible ? "UNDER_REVIEW" : "SUBMITTED",
+        status: "SUBMITTED",
         spotsRequested: 25,
-        pitch:
-          "Arch DAO runs weekly mint clubs for 6.5k verified collectors. We would distribute via a holder-only raffle.",
-        audienceSummary: "Mostly ETH-native collectors, 40% hold 3+ blue chips.",
+        communityName: "Arch DAO",
         communitySize: 18000,
-        holderCount: 2400,
-        twitterFollowers: 12000,
-        discordMembers: 6500,
-        requesterChains: ["ETHEREUM", "BASE"],
-        evidence: { links: ["https://dune.com/example/arch-dao"], attestations: { doxxed: true } },
-        walletForDelivery: "0x00000000000000000000000000000000000a2c4d",
-        deliveryChain: "ETHEREUM",
-        eligible: archEval.eligible,
-        eligibilityScore: archEval.score,
-        eligibility: archEval.checks as unknown as Prisma.InputJsonValue,
+        communityX: "https://x.com/archdao",
+        communityDiscord: "https://discord.gg/example",
+        communityTelegram: null,
+        contactName: arch.owner.name ?? "Arch DAO",
+        contactMethod: "X",
+        contactHandle: "archdao",
       },
     });
     await db.collabRequest.create({
@@ -447,72 +396,43 @@ async function seedCollab(founderId: string) {
         submittedById: small.owner.id,
         status: "SUBMITTED",
         spotsRequested: 40,
-        pitch: "We are a young studio with a tight-knit community. Would love to collab!",
+        communityName: "Small Labs",
         communitySize: 900,
-        holderCount: 120,
-        twitterFollowers: 700,
-        discordMembers: 300,
-        requesterChains: ["SOLANA"],
-        evidence: { links: [], attestations: {} },
-        eligible: smallEval.eligible,
-        eligibilityScore: smallEval.score,
-        eligibility: smallEval.checks as unknown as Prisma.InputJsonValue,
+        communityX: "https://x.com/smalllabs",
+        contactName: small.owner.name ?? "Small Labs",
+        contactMethod: "TELEGRAM",
+        contactHandle: "smalllabs",
       },
     });
-    console.log(
-      `    → requests: Arch DAO 25 (score ${archEval.score}), Small Labs 40 (score ${smallEval.score}, flagged)`
-    );
+    // A platform admin filing on behalf of a project with no oxbot account.
+    await db.collabRequest.create({
+      data: {
+        listingId: listing.id,
+        requesterTeamId: null,
+        submittedById: null,
+        addedByAdminId: founderId,
+        status: "SUBMITTED",
+        spotsRequested: 15,
+        communityName: "Ember Collective",
+        communitySize: 4200,
+        communityX: "https://x.com/embercollective",
+        contactName: "Jae",
+        contactMethod: "DISCORD",
+        contactHandle: "jae_ember",
+      },
+    });
+    console.log("    → requests: Arch DAO 25, Small Labs 40, Ember Collective 15 (admin-added, no account)");
   }
 
-  // Public raffle for the 40 public spots — a normal giveaway linked to the listing.
-  const raffle = await db.giveaway.upsert({
-    where: { slug: "lava-foxes-public-wl-demo" },
+  // A second listing: 10 spots, 7 already reserved and delivered to Arch DAO.
+  const second = await db.whitelistListing.upsert({
+    where: { slug: "lava-foxes-partners-demo" },
     update: {},
     create: {
       teamId: lava.team.id,
-      listingId: listing.id,
-      slug: "lava-foxes-public-wl-demo",
-      title: "Lava Foxes Public WL",
-      description: "40 GTD whitelist spots for the public. Follow, hold a fox, enter.",
-      prize: "GTD whitelist x 40",
-      type: "RANDOM",
-      status: "ACTIVE",
-      visibility: "PUBLIC",
-      chain: "ETHEREUM",
-      winnersCount: 40,
-      startAt: daysFromNow(-1),
-      endAt: daysFromNow(9),
-      xAccount: "lavafoxes",
-      bannerUrl: lava.team.bannerUrl,
-      createdById: lava.owner.id,
-      requirements: {
-        create: [
-          { type: "TWITTER_FOLLOW", order: 0, config: { handle: "lavafoxes" } },
-          {
-            type: "NFT_HOLD",
-            order: 1,
-            config: {
-              chain: "ETHEREUM",
-              contractAddress: "0x0000000000000000000000000000000000001a7a",
-              minCount: 1,
-              label: "Lava Foxes",
-            },
-          },
-        ],
-      },
-    },
-  });
-  console.log(`  ✓ Collab public raffle: ${raffle.title}`);
-
-  // FCFS listing: 10 spots, 7 already reserved for Arch DAO.
-  const fcfs = await db.whitelistListing.upsert({
-    where: { slug: "lava-foxes-fcfs-demo" },
-    update: {},
-    create: {
-      teamId: lava.team.id,
-      slug: "lava-foxes-fcfs-demo",
-      title: "Lava Foxes — FCFS Partner Allowlist",
-      description: "10 FCFS allowlist spots. Qualified requests are approved instantly.",
+      slug: "lava-foxes-partners-demo",
+      title: "Lava Foxes — Partner Allowlist",
+      description: "10 allowlist spots for close partners.",
       assetType: "NFT",
       chain: "ETHEREUM",
       collectionName: "Lava Foxes",
@@ -520,35 +440,34 @@ async function seedCollab(founderId: string) {
       reservedSpots: 7,
       spotsPerRequestMin: 1,
       spotsPerRequestMax: 7,
-      distributionMethod: "FCFS",
       status: "OPEN",
       startAt: daysFromNow(-1),
       endAt: daysFromNow(5),
       createdById: founderId,
-      criteria: { create: { minCommunitySize: 1000 } },
     },
   });
-  if ((await db.collabRequest.count({ where: { listingId: fcfs.id } })) === 0) {
+  if ((await db.collabRequest.count({ where: { listingId: second.id } })) === 0) {
     const request = await db.collabRequest.create({
       data: {
-        listingId: fcfs.id,
+        listingId: second.id,
         requesterTeamId: arch.team.id,
         submittedById: arch.owner.id,
         status: "APPROVED",
         spotsRequested: 7,
         spotsGranted: 7,
-        pitch: "Arch DAO mint club — 7 spots for our core contributors.",
+        communityName: "Arch DAO",
         communitySize: 18000,
-        requesterChains: ["ETHEREUM"],
-        eligible: true,
-        eligibilityScore: 100,
+        communityX: "https://x.com/archdao",
+        contactName: arch.owner.name ?? "Arch DAO",
+        contactMethod: "X",
+        contactHandle: "archdao",
         reviewedAt: new Date(),
       },
     });
     await db.collabAllocation.create({
-      data: { listingId: fcfs.id, requestId: request.id, teamId: arch.team.id, spots: 7, status: "RESERVED" },
+      data: { listingId: second.id, requestId: request.id, teamId: arch.team.id, spots: 7, status: "RESERVED" },
     });
   }
-  console.log(`  ✓ Collab FCFS listing: ${fcfs.title} (7 of 10 reserved)`);
+  console.log(`  ✓ Collab listing: ${second.title} (7 of 10 reserved)`);
   console.log("   Collab logins:  lava@oxbot.app · arch@oxbot.app · small@oxbot.app");
 }

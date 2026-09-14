@@ -141,25 +141,7 @@ export const REQUIREMENT_META: Record<
     icon: "wallet",
     description: "Enter a wallet address on the selected chain.",
   },
-  NFT_HOLD: {
-    label: "Hold an NFT",
-    short: "NFT",
-    icon: "gem",
-    description: "Hold NFTs from a specific collection in your wallet.",
-  },
-  TOKEN_BALANCE: {
-    label: "Hold a token balance",
-    short: "Token",
-    icon: "coins",
-    description: "Hold a minimum balance of a specific token in your wallet.",
-  },
 };
-
-/** Requirement types verified against an on-chain wallet balance. */
-export const HOLDING_REQUIREMENTS: RequirementType[] = ["NFT_HOLD", "TOKEN_BALANCE"];
-
-/** EVM chains — one 0x address works across all of them. */
-export const EVM_CHAINS: Blockchain[] = ["ETHEREUM", "BASE", "ARBITRUM", "POLYGON", "ROBINHOOD", "HYPERLIQUID"];
 
 /** Requirement types that involve X (Twitter). */
 export const TWITTER_REQUIREMENTS: RequirementType[] = [
@@ -195,22 +177,13 @@ export const ROLE_META: Record<TeamRole, { label: string; blurb: string }> = {
   },
   COLLAB_MANAGER: {
     label: "Collab Manager",
-    blurb: "Whitelist raffles and collabs only — no access to other giveaways or settings.",
+    blurb: "The Collab desk only — no access to giveaways, members, or settings.",
   },
 };
 
 /** Does `role` meet or exceed `required`? */
 export function roleAtLeast(role: TeamRole, required: TeamRole): boolean {
   return ROLE_RANK[role] >= ROLE_RANK[required];
-}
-
-/**
- * Minimum role required to manage a giveaway. Collab/whitelist raffles (linked
- * to a listing) are managed by Collab Managers; every other giveaway needs a
- * Raffle Manager (EDITOR) or higher.
- */
-export function requiredGiveawayRole(listingId: string | null): TeamRole {
-  return listingId ? "COLLAB_MANAGER" : "EDITOR";
 }
 
 // --- Profile wallets ---------------------------------------------------------

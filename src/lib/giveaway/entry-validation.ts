@@ -9,10 +9,8 @@ import {
   verifyReposted,
 } from "@/lib/integrations/twitter";
 import { verifyGuildMember, verifyGuildRoles } from "@/lib/integrations/discord";
-import { checkHolding } from "@/lib/integrations/nft";
-import { EVM_CHAINS } from "@/lib/constants";
 import type { EntrySubmission } from "@/lib/validation/entry";
-import type { Blockchain, GiveawayRequirement, RequirementType } from "@prisma/client";
+import type { GiveawayRequirement, RequirementType } from "@prisma/client";
 
 /**
  * Entry-validation engine.
@@ -34,12 +32,6 @@ export type RequirementConfig = {
   inviteUrl?: string;
   caseSensitive?: boolean;
   chain?: string;
-  // NFT_HOLD / TOKEN_BALANCE
-  contractAddress?: string;
-  minCount?: number;
-  tokenIds?: string[];
-  minBalance?: string;
-  label?: string;
 };
 
 export type RequirementCheck = {
@@ -63,13 +55,6 @@ export function readConfig(req: Pick<GiveawayRequirement, "config">): Requiremen
     inviteUrl: typeof c.inviteUrl === "string" ? c.inviteUrl : undefined,
     caseSensitive: typeof c.caseSensitive === "boolean" ? c.caseSensitive : undefined,
     chain: typeof c.chain === "string" ? c.chain : undefined,
-    contractAddress: typeof c.contractAddress === "string" ? c.contractAddress : undefined,
-    minCount: typeof c.minCount === "number" ? c.minCount : undefined,
-    tokenIds: Array.isArray(c.tokenIds)
-      ? c.tokenIds.filter((t): t is string => typeof t === "string")
-      : undefined,
-    minBalance: typeof c.minBalance === "string" ? c.minBalance : undefined,
-    label: typeof c.label === "string" ? c.label : undefined,
   };
 }
 
@@ -91,25 +76,19 @@ export type ConnectedAccounts = {
   twitterUserId: string | null;
   discordUserId: string | null;
   email: string | null;
-  /** Saved profile wallets (one per chain) — used by holding checks. */
-  wallets: { chain: Blockchain; address: string }[];
 };
 
 /**
- * Load a participant's connected OAuth identities, email and saved wallets.
+ * Load a participant's connected OAuth identities + email in one query.
  * OAuth accounts are populated by the Auth.js Prisma adapter on sign-in.
  */
 export async function getConnectedAccounts(userId: string): Promise<ConnectedAccounts> {
-  const [accounts, user, wallets] = await Promise.all([
+  const [accounts, user] = await Promise.all([
     db.account.findMany({
       where: { userId, provider: { in: ["twitter", "discord"] } },
       select: { provider: true, providerAccountId: true },
     }),
     db.user.findUnique({ where: { id: userId }, select: { email: true } }),
-    db.wallet.findMany({
-      where: { userId, address: { not: "" } },
-      select: { chain: true, address: true },
-    }),
   ]);
 
   const twitter = accounts.find((a) => a.provider === "twitter");
@@ -118,28 +97,7 @@ export async function getConnectedAccounts(userId: string): Promise<ConnectedAcc
     twitterUserId: twitter?.providerAccountId ?? null,
     discordUserId: discord?.providerAccountId ?? null,
     email: user?.email ?? null,
-    wallets,
   };
-}
-
-/**
- * The wallet a holding task checks: the entrant's saved wallet on the task's
- * chain; for EVM chains any saved 0x wallet (same address everywhere); else a
- * wallet pasted into the entry form.
- */
-export function walletForHolding(
-  chain: Blockchain,
-  accounts: ConnectedAccounts,
-  pasted: string | undefined
-): string | null {
-  const exact = accounts.wallets.find((w) => w.chain === chain)?.address.trim();
-  if (exact) return exact;
-  if (EVM_CHAINS.includes(chain)) {
-    const evm = accounts.wallets.find((w) => /^0x[0-9a-fA-F]{40}$/.test(w.address.trim()));
-    if (evm) return evm.address.trim();
-  }
-  const p = (pasted ?? "").trim();
-  return p.length >= 8 ? p : null;
 }
 
 /**
@@ -154,9 +112,7 @@ export async function checkRequirement(
   config: RequirementConfig,
   submission: EntrySubmission,
   accounts: ConnectedAccounts,
-  discordServerId: string | null,
-  /** The requirement row id — holding tasks match it against attestations. */
-  requirementId?: string
+  discordServerId: string | null
 ): Promise<RequirementCheck> {
   switch (type) {
     case "CAPTCHA": {
@@ -224,40 +180,6 @@ export async function checkRequirement(
         mocked: true,
         detail: ok ? "Wallet provided (unverified in Phase 1)." : "Enter a wallet address.",
       };
-    }
-
-    case "NFT_HOLD":
-    case "TOKEN_BALANCE": {
-      const chain = config.chain as Blockchain | undefined;
-      if (!chain || !config.contractAddress) {
-        return { ok: false, mocked: false, detail: "Misconfigured task." };
-      }
-      const owner = walletForHolding(chain, accounts, submission.walletAddress);
-      if (!owner) {
-        return {
-          ok: false,
-          mocked: false,
-          detail: "Save a wallet on your profile (or paste one below) so we can check your holdings.",
-        };
-      }
-      const r = await checkHolding({
-        kind: type,
-        chain,
-        contractAddress: config.contractAddress,
-        owner,
-        minCount: config.minCount,
-        tokenIds: config.tokenIds,
-        minBalance: config.minBalance,
-        label: config.label,
-      });
-      if (r.ok !== null) return { ok: r.ok, mocked: r.mocked, detail: r.detail };
-
-      // Not verified on-chain (mock mode / unconfigured chain): a wallet on file
-      // plus the entrant's explicit attestation completes the task.
-      const attested = Boolean(requirementId && submission.holdingAttestations.includes(requirementId));
-      return attested
-        ? { ok: true, mocked: true, detail: `Mock: holding attested for ${owner.slice(0, 6)}…${owner.slice(-4)}.` }
-        : { ok: false, mocked: true, detail: "Tick “I hold this” to confirm, then submit." };
     }
 
     default:

@@ -5,7 +5,7 @@ import { availableSpots } from "./constants";
 /**
  * Collab inventory — the ONLY place listing spot counters change.
  *
- * Invariant: totalSpots >= reservedSpots + allocatedSpots + publicSpots.
+ * Invariant: totalSpots >= reservedSpots + allocatedSpots.
  *
  * Every helper takes a transaction client and expects the caller to have
  * locked the listing row first via {@link lockListing} (`SELECT … FOR UPDATE`).
@@ -58,7 +58,7 @@ async function syncAllocatedStatus(tx: Tx, listing: WhitelistListing): Promise<W
 export async function grantSpots(
   tx: Tx,
   listing: WhitelistListing,
-  input: { teamId: string; spots: number; requestId?: string | null; note?: string | null }
+  input: { teamId: string | null; spots: number; requestId?: string | null; note?: string | null }
 ): Promise<{ allocation: CollabAllocation; listing: WhitelistListing }> {
   const remaining = availableSpots(listing);
   if (!Number.isInteger(input.spots) || input.spots < 1) {
@@ -149,17 +149,17 @@ export async function transitionAllocation(
 }
 
 /**
- * Validate a new total / public split against what's already granted. Used by
- * listing edits so a founder can't shrink inventory below committed spots.
+ * Validate a new total against what's already granted. Used by listing edits
+ * so a founder can't shrink inventory below committed spots.
  */
 export function assertCapacity(
   listing: Pick<WhitelistListing, "reservedSpots" | "allocatedSpots">,
-  next: { totalSpots: number; publicSpots: number }
+  next: { totalSpots: number }
 ): void {
   const committed = listing.reservedSpots + listing.allocatedSpots;
-  if (next.totalSpots - next.publicSpots < committed) {
+  if (next.totalSpots < committed) {
     throw new InventoryError(
-      `${committed} partner spot${committed === 1 ? " is" : "s are"} already granted — total minus public spots can't go below that.`
+      `${committed} spot${committed === 1 ? " is" : "s are"} already granted — total spots can't go below that.`
     );
   }
 }

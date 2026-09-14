@@ -53,13 +53,9 @@ export default async function ManageGiveawayPage({
 }) {
   const { team: slug, id } = await params;
   const { status: statusParam } = await searchParams;
-  const { team, membership } = await resolveTeamPage(slug, "COLLAB_MANAGER");
+  const { team, membership } = await resolveTeamPage(slug, "EDITOR");
   const giveaway = await getManagedGiveaway(team.id, id);
   if (!giveaway) notFound();
-
-  // Collab Managers may only open a giveaway that is a Collab/whitelist raffle.
-  const isCollabRaffle = giveaway.listingId !== null;
-  if (!roleAtLeast(membership.role, "EDITOR") && !isCollabRaffle) notFound();
 
   const phase = giveawayPhase(giveaway);
   const phaseMeta = PHASE_META[phase];
@@ -67,9 +63,6 @@ export default async function ManageGiveawayPage({
   const canAdmin = roleAtLeast(membership.role, "ADMIN");
   // Full giveaway management (edit + lifecycle): Raffle Manager (EDITOR) or up.
   const canManage = roleAtLeast(membership.role, "EDITOR");
-  // Run-the-raffle actions (draw / re-roll / disqualify / export): also a Collab
-  // Manager, but only on Collab/whitelist raffles.
-  const canRunRaffle = canManage || isCollabRaffle;
   const isPublicable = giveaway.visibility !== "PRIVATE" && phase !== "draft";
 
   const statusFilter = parseStatusFilter(statusParam);
@@ -81,9 +74,9 @@ export default async function ManageGiveawayPage({
   return (
     <div className="max-w-6xl">
       <Button asChild variant="ghost" size="sm" className="mb-2 -ml-2 text-muted-foreground">
-        <Link href={canManage ? `/dashboard/${slug}/giveaways` : `/dashboard/${slug}/collab/raffles`}>
+        <Link href={`/dashboard/${slug}/giveaways`}>
           <ArrowLeft className="h-4 w-4" />
-          {canManage ? "Back to giveaways" : "Back to raffles"}
+          Back to giveaways
         </Link>
       </Button>
 
@@ -121,8 +114,6 @@ export default async function ManageGiveawayPage({
         )}
       </div>
 
-      {/* Lifecycle actions — full management only (Collab/whitelist raffles are
-          run from the Collab section and auto-close on their end time). */}
       {canManage && (
         <div className="mb-8">
           <GiveawayActions giveawayId={giveaway.id} status={giveaway.status} canAdmin={canAdmin} />
@@ -171,7 +162,7 @@ export default async function ManageGiveawayPage({
             winners={winners}
             drawnAt={giveaway.drawnAt}
             drawSeed={giveaway.drawSeed}
-            canManage={canRunRaffle}
+            canManage={canManage}
           />
         </div>
       )}
@@ -251,7 +242,7 @@ export default async function ManageGiveawayPage({
               Private to your team · {formatNumber(giveaway.entryCount)} total
             </p>
           </div>
-          {giveaway.entryCount > 0 && canRunRaffle && (
+          {giveaway.entryCount > 0 && canManage && (
             <Button asChild variant="outline" size="sm">
               <a href={`/dashboard/${slug}/giveaways/${id}/export`}>
                 <Download className="h-4 w-4" />
@@ -288,7 +279,7 @@ export default async function ManageGiveawayPage({
         <EntrantsTable
           entrants={entrants}
           requirements={giveaway.requirements}
-          canManage={canRunRaffle}
+          canManage={canManage}
         />
       </div>
 
@@ -328,15 +319,6 @@ function requirementDetail(r: ManagedRequirement): string {
       return c.caseSensitive ? " — case-sensitive" : "";
     case "WALLET":
       return typeof c.chain === "string" && c.chain ? ` — ${c.chain}` : "";
-    case "NFT_HOLD": {
-      const n = typeof c.minCount === "number" ? c.minCount : 1;
-      const name = typeof c.label === "string" && c.label ? c.label : "collection";
-      return ` — ${n}+ ${name}${typeof c.chain === "string" ? ` on ${c.chain}` : ""}`;
-    }
-    case "TOKEN_BALANCE": {
-      const name = typeof c.label === "string" && c.label ? c.label : "tokens";
-      return ` — ${typeof c.minBalance === "string" ? c.minBalance : ""} ${name}${typeof c.chain === "string" ? ` on ${c.chain}` : ""}`;
-    }
     default:
       return "";
   }

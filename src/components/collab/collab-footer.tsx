@@ -43,7 +43,6 @@ export async function CollabFooter() {
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
             <FooterCol title="Desk">
               <FooterLink href={href("/listings")}>Browse listings</FooterLink>
-              <FooterLink href={href("/raffles")}>Public raffles</FooterLink>
               <FooterLink href={href("/guide")}>How it works</FooterLink>
               <FooterLink href={deskHref}>Your desk</FooterLink>
               {newListingHref && <FooterLink href={newListingHref}>List inventory</FooterLink>}

@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChainBadge } from "@/components/giveaway/chain-badge";
 import { Countdown } from "@/components/giveaway/countdown";
-import { AssetTypeChip, MethodChip, PublicRaffleChip } from "@/components/collab/collab-chips";
+import { AssetTypeChip } from "@/components/collab/collab-chips";
 import { InventoryBar } from "@/components/collab/inventory-bar";
 
 /**
@@ -21,8 +21,6 @@ import { InventoryBar } from "@/components/collab/inventory-bar";
 export function ListingCard({ listing, href }: { listing: ListingCardData; href: string }) {
   const phase = listingPhase(listing);
   const phaseMeta = LISTING_PHASE_META[phase];
-  const raffleOpen =
-    listing.publicRaffle?.status === "ACTIVE" && new Date(listing.publicRaffle.endAt).getTime() > Date.now();
   const assetLabel = listing.assetType === "TOKEN" ? listing.tokenSymbol : listing.collectionName;
 
   return (
@@ -68,11 +66,6 @@ export function ListingCard({ listing, href }: { listing: ListingCardData; href:
           <div className="absolute right-3 top-3">
             <ChainBadge chain={listing.chain} showLabel={false} />
           </div>
-          {raffleOpen && (
-            <div className="absolute bottom-3 left-3">
-              <PublicRaffleChip />
-            </div>
-          )}
         </div>
 
         <div className="space-y-3 p-4">
@@ -95,7 +88,6 @@ export function ListingCard({ listing, href }: { listing: ListingCardData; href:
           </h3>
 
           <div className="flex flex-wrap items-center gap-1.5">
-            <MethodChip method={listing.distributionMethod} />
             <AssetTypeChip assetType={listing.assetType} />
           </div>
 

@@ -1,10 +1,4 @@
-import type {
-  AllocationStatus,
-  AssetType,
-  DistributionMethod,
-  ListingStatus,
-  RequestStatus,
-} from "@prisma/client";
+import type { AllocationStatus, AssetType, ListingStatus, RequestStatus } from "@prisma/client";
 
 import type { BadgeProps } from "@/components/ui/badge";
 
@@ -14,31 +8,6 @@ import type { BadgeProps } from "@/components/ui/badge";
  */
 
 type BadgeVariant = NonNullable<BadgeProps["variant"]>;
-
-export const DISTRIBUTION_METHODS: DistributionMethod[] = ["FCFS", "CRITERIA", "RAFFLE", "MANUAL"];
-
-export const METHOD_META: Record<DistributionMethod, { label: string; short: string; blurb: string }> = {
-  FCFS: {
-    label: "First come, first served",
-    short: "FCFS",
-    blurb: "The first qualified requests are approved instantly until spots run out.",
-  },
-  CRITERIA: {
-    label: "Criteria review",
-    short: "Criteria",
-    blurb: "Requesters must meet your thresholds. Qualified requests land in your review queue.",
-  },
-  RAFFLE: {
-    label: "Partner raffle",
-    short: "Raffle",
-    blurb: "Qualified requester teams are drawn with a seeded CSPRNG when the window closes.",
-  },
-  MANUAL: {
-    label: "Manual",
-    short: "Manual",
-    blurb: "Every request comes to you. Pick partners and set spots by hand.",
-  },
-};
 
 export const ASSET_TYPES: AssetType[] = ["NFT", "TOKEN", "OTHER"];
 
@@ -101,17 +70,11 @@ export type InventoryCounts = {
   totalSpots: number;
   reservedSpots: number;
   allocatedSpots: number;
-  publicSpots: number;
 };
 
-/** Partner spots still free: total − reserved − allocated − public. Never negative. */
+/** Spots still free: total − reserved − allocated. Never negative. */
 export function availableSpots(l: InventoryCounts): number {
-  return Math.max(0, l.totalSpots - l.reservedSpots - l.allocatedSpots - l.publicSpots);
-}
-
-/** Partner-facing capacity (everything except the public raffle slice). */
-export function partnerCapacity(l: InventoryCounts): number {
-  return Math.max(0, l.totalSpots - l.publicSpots);
+  return Math.max(0, l.totalSpots - l.reservedSpots - l.allocatedSpots);
 }
 
 /**

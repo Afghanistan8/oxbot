@@ -2,15 +2,15 @@
 
 import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { AssetType, Blockchain, DistributionMethod } from "@prisma/client";
+import type { AssetType, Blockchain } from "@prisma/client";
 
 import { CHAIN_META } from "@/lib/constants";
-import { ASSET_TYPES, ASSET_TYPE_META, DISTRIBUTION_METHODS, METHOD_META } from "@/lib/collab/constants";
+import { ASSET_TYPES, ASSET_TYPE_META } from "@/lib/collab/constants";
 import { cn } from "@/lib/utils";
 
 /**
  * ListingFilters — URL-driven filter chips for the Collab desk (same pattern
- * as GiveawayFilters): chain, asset type, method, open-now, and sort.
+ * as GiveawayFilters): chain, asset type, open-now, and sort.
  */
 export function ListingFilters({
   chains,
@@ -21,7 +21,6 @@ export function ListingFilters({
   active: {
     chain?: Blockchain;
     type?: AssetType;
-    method?: DistributionMethod;
     open: boolean;
     sort: "ending" | "new" | "spots";
   };
@@ -61,12 +60,6 @@ export function ListingFilters({
           {ASSET_TYPES.filter((t) => t !== "OTHER").map((t) => (
             <Chip key={t} active={active.type === t} onClick={() => setParam("type", active.type === t ? null : t)}>
               {ASSET_TYPE_META[t].label}
-            </Chip>
-          ))}
-          <div className="hidden h-5 w-px bg-border sm:block" />
-          {DISTRIBUTION_METHODS.map((m) => (
-            <Chip key={m} active={active.method === m} onClick={() => setParam("method", active.method === m ? null : m)}>
-              {METHOD_META[m].short}
             </Chip>
           ))}
         </div>

@@ -21,11 +21,11 @@ export default async function CollabListingsBrowsePage({ searchParams }: { searc
 
   let listings: ListingCardData[] = [];
   try {
-    listings = await listPublicListings({ chain: f.chain, assetType: f.type, method: f.method, openOnly: f.open, sort: f.sort });
+    listings = await listPublicListings({ chain: f.chain, assetType: f.type, openOnly: f.open, sort: f.sort });
   } catch {
     // DB unavailable — render the empty state.
   }
-  const filtered = Boolean(f.chain || f.type || f.method || f.open);
+  const filtered = Boolean(f.chain || f.type || f.open);
 
   return (
     <main className="relative">
@@ -36,7 +36,7 @@ export default async function CollabListingsBrowsePage({ searchParams }: { searc
           Whitelist <span className="text-gradient-crimson">listings</span>
         </h1>
         <p className="mt-3 max-w-xl text-muted-foreground">
-          Allocations from NFT and token projects. Request spots for your community, or enter a public raffle.
+          Allocations from NFT and token projects. Request spots for your community.
         </p>
 
         <div className="mb-8 mt-10">

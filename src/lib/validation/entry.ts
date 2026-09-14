@@ -24,12 +24,6 @@ export const entrySubmissionSchema = z.object({
   code: z.string().trim().max(64).optional().or(z.literal("")),
   /** Wallet address for the (optional, Phase 1) WALLET requirement. */
   walletAddress: z.string().trim().max(120).optional().or(z.literal("")),
-  /**
-   * Requirement ids of NFT_HOLD / TOKEN_BALANCE tasks the entrant attested
-   * ("I hold this"). Completes the task in mock mode; ignored when holdings
-   * are verified on-chain.
-   */
-  holdingAttestations: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
 });
 
 export type EntrySubmission = z.infer<typeof entrySubmissionSchema>;

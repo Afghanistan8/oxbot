@@ -18,7 +18,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChainBadge } from "@/components/giveaway/chain-badge";
 import { CollabEmptyState } from "@/components/collab/collab-empty-state";
-import { MethodChip } from "@/components/collab/collab-chips";
 import {
   AllocationWalletsForm,
   RequestReplyForm,
@@ -99,7 +98,6 @@ function OutgoingCard({ request: r }: { request: OutgoingRequestRow }) {
               {r.listing.title}
             </a>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <MethodChip method={r.listing.distributionMethod} />
               <ChainBadge chain={r.listing.chain} showLabel={false} />
               <span className="text-xs text-muted-foreground">
                 Filed <LocalTime value={r.createdAt} mode="date" />
@@ -119,7 +117,6 @@ function OutgoingCard({ request: r }: { request: OutgoingRequestRow }) {
               <span className="text-muted-foreground">{formatNumber(r.spotsRequested)} requested</span>
             )}
           </p>
-          {!r.eligible && isOpen && <p className="text-xs text-amber-300">Flagged below criteria ({r.eligibilityScore}/100)</p>}
         </div>
       </div>
 

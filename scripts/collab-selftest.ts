@@ -4,27 +4,24 @@
  *   npm run collab:selftest            # pure checks + DB race tests
  *   npm run collab:selftest -- --no-db # pure checks only
  *
- * 1. Eligibility engine: thresholds, chains, attestations, scoring.
- * 2. Partner raffle plan: deterministic for a seed, never exceeds capacity.
- * 3. FCFS race (DB): many teams file at the same instant against a small
- *    listing — asserts spots are never oversold and counters match the
- *    allocation rows. Also double-approves one request concurrently and a
- *    duplicate double-submit from one team.
+ * 1. Inventory math: `availableSpots` never goes negative.
+ * 2. Concurrent approvals (DB): many requests are approved at the same instant
+ *    against a small listing — asserts spots are never oversold and counters
+ *    match the allocation rows. Also double-approves one request concurrently
+ *    and a duplicate double-file from one team.
+ *
+ * There's no scoring or auto-approval here anymore — every request lands as
+ * SUBMITTED and a human decides. The thing worth proving race-safe is the
+ * grant itself.
  *
  * DB tests create rows prefixed `zz-collab-selftest-` and always delete them.
  * Relative imports only (runs under tsx).
  */
 import { PrismaClient } from "@prisma/client";
 
-import { evaluateEligibility, type CriteriaInput } from "../src/lib/collab/eligibility";
 import { availableSpots } from "../src/lib/collab/constants";
-import {
-  RequestRuleError,
-  approveRequest,
-  fileRequest,
-  planPartnerRaffle,
-  type FileRequestInput,
-} from "../src/lib/collab/requests";
+import { RequestRuleError, approveRequest, fileRequest, type FileRequestInput } from "../src/lib/collab/requests";
+import { InventoryError } from "../src/lib/collab/inventory";
 
 const PREFIX = "zz-collab-selftest-";
 let failures = 0;
@@ -39,59 +36,14 @@ function check(name: string, cond: boolean, detail?: unknown) {
 }
 
 function pureTests() {
-  console.log("\nEligibility engine");
-  const criteria: CriteriaInput = {
-    minCommunitySize: 5000,
-    minHolderCount: null,
-    minTwitterFollowers: 3000,
-    minDiscordMembers: null,
-    minRaffleEntries: 10,
-    requiredChains: ["ETHEREUM"],
-    requiredAssetType: null,
-    requireVerifiedTeam: false,
-    customRules: [{ id: "doxxed", label: "Doxxed team" }],
-  };
-  const base = {
-    communitySize: 9000,
-    holderCount: null,
-    twitterFollowers: 4000,
-    discordMembers: null,
-    raffleEntries: 12,
-    chains: ["ETHEREUM" as const],
-    assetType: null,
-    verifiedTeam: false,
-    attestations: { doxxed: true },
-  };
-  const pass = evaluateEligibility(criteria, { ...base, chains: [...base.chains] });
-  check("qualified requester is eligible with score 100", pass.eligible && pass.score === 100, pass);
-
-  const low = evaluateEligibility(criteria, { ...base, chains: ["SOLANA"], communitySize: 100, attestations: {} });
-  check("under-qualified requester is flagged", !low.eligible && low.score < 100, low);
-  check(
-    "missing checks are the failing ones",
-    low.checks.filter((c) => !c.met).map((c) => c.key).sort().join() === ["chains", "communitySize", "rule:doxxed"].sort().join(),
-    low.checks
-  );
-  check("no criteria → eligible", evaluateEligibility(null, { ...base, chains: [] }).eligible);
-
-  console.log("\nPartner raffle plan");
-  const candidates = Array.from({ length: 20 }, (_, i) => ({
-    id: `req-${String(i).padStart(2, "0")}`,
-    requesterTeamId: `team-${i}`,
-    spotsRequested: 3 + (i % 4),
-  }));
-  const a = planPartnerRaffle(candidates, 25, 2, "seed-one");
-  const b = planPartnerRaffle([...candidates].reverse(), 25, 2, "seed-one");
-  const c = planPartnerRaffle(candidates, 25, 2, "seed-two");
-  check("same seed → same winners regardless of input order", JSON.stringify(a) === JSON.stringify(b));
-  check("different seed → different order", JSON.stringify(a.winners) !== JSON.stringify(c.winners));
-  const granted = a.winners.reduce((n, w) => n + w.spots, 0);
-  check("never grants more than capacity", granted <= 25, granted);
-  check("respects the per-partner minimum", a.winners.every((w) => w.spots >= 2));
+  console.log("\nInventory math");
+  check("fully available", availableSpots({ totalSpots: 10, reservedSpots: 0, allocatedSpots: 0 }) === 10);
+  check("partially granted", availableSpots({ totalSpots: 10, reservedSpots: 3, allocatedSpots: 2 }) === 5);
+  check("never negative when oversubscribed", availableSpots({ totalSpots: 10, reservedSpots: 6, allocatedSpots: 6 }) === 0);
 }
 
 async function dbTests(db: PrismaClient) {
-  console.log("\nFCFS race (database)");
+  console.log("\nConcurrent approvals (database)");
   const stamp = Date.now().toString(36);
   const lister = await db.team.create({ data: { slug: `${PREFIX}lister-${stamp}`, name: "Selftest Lister" } });
   const requesters = await Promise.all(
@@ -105,89 +57,69 @@ async function dbTests(db: PrismaClient) {
       data: {
         teamId: lister.id,
         slug: `${PREFIX}listing-${stamp}`,
-        title: "Selftest FCFS",
+        title: "Selftest listing",
         assetType: "NFT",
         chain: "ETHEREUM",
         totalSpots: 10,
-        publicSpots: 1,
         spotsPerRequestMin: 1,
         spotsPerRequestMax: 3,
-        distributionMethod: "FCFS",
         status: "OPEN",
         startAt: new Date(Date.now() - 60_000),
         endAt: new Date(Date.now() + 3_600_000),
       },
     });
 
-    const eligibility = { eligible: true, score: 100, checks: [] };
     const input = (teamId: string): FileRequestInput => ({
       listingId: listing.id,
       requesterTeamId: teamId,
       submittedById: null,
+      addedByAdminId: null,
       spotsRequested: 3,
-      pitch: "Selftest request",
-      audienceSummary: null,
+      communityName: "Selftest Community",
       communitySize: 1,
-      holderCount: null,
-      twitterFollowers: null,
-      discordMembers: null,
-      community: {
-        communityName: "Selftest Community",
-        communityX: "https://x.com/selftest",
-        communityDiscord: null,
-        communityTelegram: null,
-        communityTiktok: null,
-        communityInstagram: null,
-        reportedRaffleEntries: 0,
-        contactName: "Selftest",
-        contactEmail: "selftest@oxbot.test",
-        contactX: null,
-        contactDiscord: null,
-        contactTelegram: null,
-      },
-      requesterChains: [],
-      requesterAssetType: null,
-      evidence: { links: [], attestations: {} },
-      walletForDelivery: null,
-      deliveryChain: null,
-      eligibility,
+      communityX: "https://x.com/selftest",
+      communityDiscord: null,
+      communityTelegram: null,
+      raffleProofImageUrl: null,
+      contactName: "Selftest",
+      contactMethod: "X",
+      contactHandle: "selftest",
     });
 
-    // 12 teams × 3 spots = 36 asked against 9 partner spots, all at once.
-    const results = await Promise.allSettled(requesters.map((t) => fileRequest(db, input(t.id))));
-    const fulfilled = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
-    const rejected = results.filter((r) => r.status === "rejected");
-    check("every concurrent submission resolved", rejected.length === 0, rejected);
+    // 12 teams file at once — filing never touches inventory, so all should land as SUBMITTED.
+    const filed = await Promise.allSettled(requesters.map((t) => fileRequest(db, input(t.id))));
+    const fulfiled = filed.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    const filedRejected = filed.filter((r) => r.status === "rejected");
+    check("every concurrent filing resolved", filedRejected.length === 0, filedRejected);
+    check("every request lands as SUBMITTED", fulfiled.every((o) => o.request.status === "SUBMITTED"));
 
-    const approved = fulfilled.filter((o) => o.request.status === "APPROVED");
-    const waitlisted = fulfilled.filter((o) => o.request.status === "WAITLISTED");
+    // 12 requests × 3 spots = 36 asked against 10 total spots, approved all at once.
+    const approvals = await Promise.allSettled(
+      fulfiled.map((o) => approveRequest(db, { requestId: o.request.id, spotsGranted: 3, reviewerId: null, note: null }))
+    );
+    const approved = approvals.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    const capacityErrors = approvals.filter((r) => r.status === "rejected" && r.reason instanceof InventoryError);
+
     const after = await db.whitelistListing.findUniqueOrThrow({ where: { id: listing.id } });
     const allocations = await db.collabAllocation.findMany({ where: { listingId: listing.id } });
     const allocated = allocations.reduce((n, a) => n + a.spots, 0);
 
-    check("exactly 3 requests approved (9 partner spots / 3 each)", approved.length === 3, approved.length);
-    check("the other 9 were waitlisted", waitlisted.length === 9, waitlisted.length);
+    check("exactly 3 requests approved (9 of 10 spots, the 4th would overshoot)", approved.length === 3, approved.length);
+    check("the rest hit the inventory cap", capacityErrors.length === fulfiled.length - approved.length, capacityErrors.length);
     check("reserved counter equals allocation rows", after.reservedSpots === allocated, { reserved: after.reservedSpots, allocated });
-    check(
-      "never oversold: reserved + allocated + public <= total",
-      after.reservedSpots + after.allocatedSpots + after.publicSpots <= after.totalSpots,
-      after
-    );
-    check("available is 0 and listing flipped to ALLOCATED", availableSpots(after) === 0 && after.status === "ALLOCATED", after);
+    check("never oversold: reserved + allocated <= total", after.reservedSpots + after.allocatedSpots <= after.totalSpots, after);
 
     console.log("\nDuplicate + double-approve (database)");
-    // Free inventory by growing the listing, then race two approvals of one waitlisted request.
+    const pending = fulfiled.find((o) => !approved.some((a) => a.request.id === o.request.id))!.request;
+    // Free inventory by growing the listing, then race two approvals of the same still-open request.
     await db.whitelistListing.update({ where: { id: listing.id }, data: { totalSpots: 13, status: "OPEN" } });
-    const target = waitlisted[0]!.request;
-    const approvals = await Promise.allSettled([
-      approveRequest(db, { requestId: target.id, spotsGranted: 3, reviewerId: null, note: null }),
-      approveRequest(db, { requestId: target.id, spotsGranted: 3, reviewerId: null, note: null }),
+    const doubleApprove = await Promise.allSettled([
+      approveRequest(db, { requestId: pending.id, spotsGranted: 3, reviewerId: null, note: null }),
+      approveRequest(db, { requestId: pending.id, spotsGranted: 3, reviewerId: null, note: null }),
     ]);
-    const okApprovals = approvals.filter((r) => r.status === "fulfilled").length;
-    const ruleErrors = approvals.filter((r) => r.status === "rejected" && r.reason instanceof RequestRuleError).length;
-    check("one of two concurrent approvals wins", okApprovals === 1 && ruleErrors === 1, approvals);
-    const afterApprove = await db.whitelistListing.findUniqueOrThrow({ where: { id: listing.id } });
-    check("approval moved exactly 3 more spots", afterApprove.reservedSpots === 12, afterApprove.reservedSpots);
+    const okApprovals = doubleApprove.filter((r) => r.status === "fulfilled").length;
+    const ruleErrors = doubleApprove.filter((r) => r.status === "rejected" && r.reason instanceof RequestRuleError).length;
+    check("one of two concurrent approvals wins", okApprovals === 1 && ruleErrors === 1, doubleApprove);
 
     const dupTeam = requesters[0]!;
     const dups = await Promise.allSettled([fileRequest(db, input(dupTeam.id)), fileRequest(db, input(dupTeam.id))]);

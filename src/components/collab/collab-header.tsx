@@ -27,7 +27,6 @@ export async function CollabHeader() {
 
   const links = [
     { href: href("/listings"), label: "Listings" },
-    { href: href("/raffles"), label: "Public raffles" },
     { href: href("/guide"), label: "How it works" },
   ];
 

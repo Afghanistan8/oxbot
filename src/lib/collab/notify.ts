@@ -15,7 +15,7 @@ import { absoluteUrl } from "@/lib/utils";
  *    "WL collab secured" embed is exactly what communities want to announce.
  */
 
-type Decision = "approved" | "rejected" | "needs_info" | "waitlisted" | "raffle_won";
+type Decision = "approved" | "rejected" | "needs_info" | "waitlisted";
 
 export async function notifyRequestDecision(input: {
   decision: Decision;
@@ -34,10 +34,6 @@ export async function notifyRequestDecision(input: {
     approved: {
       subject: `${input.listingTeam.name} granted you ${spots} whitelist spot${spots === 1 ? "" : "s"}`,
       line: `${input.listingTeam.name} approved ${input.requesterTeam.name} for ${spots} spot${spots === 1 ? "" : "s"} on “${input.listing.title}”. Submit your delivery wallets to lock them in.`,
-    },
-    raffle_won: {
-      subject: `You won ${spots} spot${spots === 1 ? "" : "s"} in the ${input.listingTeam.name} partner raffle`,
-      line: `${input.requesterTeam.name} was drawn for ${spots} spot${spots === 1 ? "" : "s"} on “${input.listing.title}”. Submit your delivery wallets to lock them in.`,
     },
     rejected: {
       subject: `Update on your request to ${input.listingTeam.name}`,
@@ -67,7 +63,7 @@ export async function notifyRequestDecision(input: {
     }
   }
 
-  if ((input.decision === "approved" || input.decision === "raffle_won") && input.requesterTeam.discordWebhookUrl) {
+  if (input.decision === "approved" && input.requesterTeam.discordWebhookUrl) {
     const res = await postCollabAnnouncement(input.requesterTeam.discordWebhookUrl, {
       title: `WL collab secured: ${input.listingTeam.name}`,
       description: `${input.requesterTeam.name} secured ${spots} whitelist spot${spots === 1 ? "" : "s"} for “${input.listing.title}”.`,

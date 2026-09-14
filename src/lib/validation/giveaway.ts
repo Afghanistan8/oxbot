@@ -67,39 +67,6 @@ const requirementSchema = z.discriminatedUnion("type", [
     required: z.literal(true).default(true),
     chain: chainEnum.optional(),
   }),
-  z.object({
-    type: z.literal("NFT_HOLD"),
-    required: z.boolean().default(true),
-    chain: chainEnum,
-    contractAddress: z
-      .string()
-      .trim()
-      .min(3, "Enter the collection's contract or collection address.")
-      .max(120),
-    minCount: z.coerce.number().int().min(1, "At least 1.").max(10000).default(1),
-    // Optional allowlist of token ids (EVM ERC-721); empty = any token.
-    tokenIds: z
-      .array(z.string().trim().regex(/^\d+$/, "Token ids are whole numbers."))
-      .max(500, "Up to 500 token ids.")
-      .default([]),
-    label: z.string().trim().max(60).optional().or(z.literal("")),
-  }),
-  z.object({
-    type: z.literal("TOKEN_BALANCE"),
-    required: z.boolean().default(true),
-    chain: chainEnum,
-    contractAddress: z
-      .string()
-      .trim()
-      .min(3, "Enter the token's contract address or mint.")
-      .max(120),
-    minBalance: z
-      .string()
-      .trim()
-      .regex(/^\d+(\.\d{1,18})?$/, "Enter an amount like 100 or 0.5.")
-      .max(40),
-    label: z.string().trim().max(60).optional().or(z.literal("")),
-  }),
 ]);
 
 export type RequirementInput = z.infer<typeof requirementSchema>;

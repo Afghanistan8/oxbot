@@ -1,18 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Calendar, ExternalLink, Inbox, ListChecks, Lock, Pencil, StickyNote, Ticket } from "lucide-react";
+import { ArrowLeft, Calendar, ExternalLink, Inbox, Lock, Pencil, StickyNote } from "lucide-react";
 
 import { resolveTeamPage } from "@/server/queries/require-team-page";
 import { getManagedListing } from "@/server/queries/collab";
 import { roleAtLeast } from "@/lib/constants";
-import {
-  ALLOCATION_STATUS_META,
-  LISTING_PHASE_META,
-  METHOD_META,
-  REQUEST_STATUS_META,
-  listingPhase,
-} from "@/lib/collab/constants";
-import { criteriaRows } from "@/lib/collab/format";
+import { ALLOCATION_STATUS_META, LISTING_PHASE_META, REQUEST_STATUS_META, listingPhase } from "@/lib/collab/constants";
 import { collabShareUrl } from "@/lib/collab/surface";
 import { formatNumber } from "@/lib/utils";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -22,10 +15,9 @@ import { ChainBadge } from "@/components/giveaway/chain-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AssetTypeChip, MethodChip } from "@/components/collab/collab-chips";
+import { AssetTypeChip } from "@/components/collab/collab-chips";
 import { InventoryBar } from "@/components/collab/inventory-bar";
 import { ListingActions } from "@/components/collab/listing-actions";
-import { PartnerRafflePanel } from "@/components/collab/partner-raffle-panel";
 import type { AllocationStatus, RequestStatus } from "@prisma/client";
 
 export async function generateMetadata({ params }: { params: Promise<{ team: string; id: string }> }) {
@@ -33,7 +25,7 @@ export async function generateMetadata({ params }: { params: Promise<{ team: str
   return { title: `${team} · Collab listing` };
 }
 
-/** Listing management — inventory, criteria, request pipeline, lifecycle. */
+/** Listing management — inventory, request pipeline, lifecycle. */
 export default async function ManageListingPage({ params }: { params: Promise<{ team: string; id: string }> }) {
   const { team: slug, id } = await params;
   const { team, membership } = await resolveTeamPage(slug, "COLLAB_MANAGER");
@@ -44,7 +36,6 @@ export default async function ManageListingPage({ params }: { params: Promise<{ 
   const phaseMeta = LISTING_PHASE_META[phase];
   const canAdmin = roleAtLeast(membership.role, "ADMIN");
   const publicUrl = collabShareUrl(`/listings/${listing.slug}`);
-  const rows = criteriaRows(listing.criteria);
   const base = `/dashboard/${slug}/collab`;
 
   return (
@@ -56,7 +47,7 @@ export default async function ManageListingPage({ params }: { params: Promise<{ 
         </Link>
       </Button>
 
-      <PageHeader title={listing.title} description={METHOD_META[listing.distributionMethod].label}>
+      <PageHeader title={listing.title}>
         {listing.status !== "CANCELLED" && (
           <Button asChild variant="outline" size="sm">
             <Link href={`${base}/listings/${id}/edit`}>
@@ -78,7 +69,6 @@ export default async function ManageListingPage({ params }: { params: Promise<{ 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={phaseMeta.badge}>{phaseMeta.label}</Badge>
-          <MethodChip method={listing.distributionMethod} />
           <AssetTypeChip assetType={listing.assetType} />
           <ChainBadge chain={listing.chain} />
           {listing.visibility === "PRIVATE" && (
@@ -101,36 +91,14 @@ export default async function ManageListingPage({ params }: { params: Promise<{ 
             </CardHeader>
             <CardContent className="space-y-5">
               <InventoryBar listing={listing} />
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="grid grid-cols-3 gap-3">
                 <Mini label="Total" value={formatNumber(listing.totalSpots)} />
                 <Mini label="Available" value={formatNumber(listing.available)} accent />
                 <Mini label="Granted" value={formatNumber(listing.reservedSpots + listing.allocatedSpots)} />
-                <Mini label="Public raffle" value={formatNumber(listing.publicSpots)} />
               </div>
               <p className="text-xs text-muted-foreground">
                 Partners may request {formatNumber(listing.spotsPerRequestMin)}–{formatNumber(listing.spotsPerRequestMax)} spots each.
               </p>
-              {(listing.publicSpots > 0 || listing.publicRaffle) && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gold/25 bg-gold/[0.06] px-4 py-3">
-                  <p className="flex items-center gap-2 text-sm text-gold">
-                    <Ticket className="h-4 w-4" />
-                    {listing.publicRaffle
-                      ? `Public raffle · ${listing.publicRaffle.status.toLowerCase()}`
-                      : `${formatNumber(listing.publicSpots)} public spots waiting for a raffle`}
-                  </p>
-                  <Button asChild size="sm" variant={listing.publicRaffle ? "outline" : "gold"}>
-                    <Link
-                      href={
-                        listing.publicRaffle
-                          ? `/dashboard/${slug}/giveaways/${listing.publicRaffle.id}`
-                          : `${base}/raffles`
-                      }
-                    >
-                      {listing.publicRaffle ? "Manage raffle" : "Open raffle"}
-                    </Link>
-                  </Button>
-                </div>
-              )}
             </CardContent>
           </Card>
 
@@ -172,18 +140,6 @@ export default async function ManageListingPage({ params }: { params: Promise<{ 
         </div>
 
         <div className="space-y-6">
-          {listing.distributionMethod === "RAFFLE" && listing.status !== "DRAFT" && listing.status !== "CANCELLED" && (
-            <PartnerRafflePanel
-              listingId={listing.id}
-              qualified={listing.qualifiedOpenCount}
-              available={listing.available}
-              windowEnded={listing.endAt.getTime() <= Date.now()}
-              drawnAt={listing.drawnAt}
-              drawSeed={listing.drawSeed}
-              canDraw
-            />
-          )}
-
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -196,22 +152,6 @@ export default async function ManageListingPage({ params }: { params: Promise<{ 
               <Row label="Closes" value={<LocalTime value={listing.endAt} />} />
               {listing.mintOrTgeAt && (
                 <Row label={listing.assetType === "TOKEN" ? "TGE" : "Mint"} value={<LocalTime value={listing.mintOrTgeAt} />} />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ListChecks className="h-4 w-4 text-scarlet-soft" />
-                Criteria
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {rows.length === 0 ? (
-                <p className="text-muted-foreground">Open to every project.</p>
-              ) : (
-                rows.map((r) => <Row key={r.label} label={r.label} value={r.value} />)
               )}
             </CardContent>
           </Card>

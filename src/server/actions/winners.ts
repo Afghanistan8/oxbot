@@ -8,7 +8,6 @@ import { requireTeamRole, AuthzError } from "@/lib/authz";
 import { recordAudit } from "@/lib/audit";
 import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { giveawayPhase } from "@/lib/format";
-import { requiredGiveawayRole } from "@/lib/constants";
 import { readConfig } from "@/lib/giveaway/entry-validation";
 import { verifyGuildMember, verifyGuildRoles } from "@/lib/integrations/discord";
 import {
@@ -198,7 +197,7 @@ export async function drawWinnersAction(
       include: { team: { select: { slug: true } }, requirements: true },
     });
     if (!giveaway) return fail("Giveaway not found.");
-    await requireTeamRole(userId, giveaway.teamId, requiredGiveawayRole(giveaway.listingId));
+    await requireTeamRole(userId, giveaway.teamId, "EDITOR");
 
     const phase = giveawayPhase(giveaway);
     if (phase === "draft" || phase === "cancelled") {
@@ -229,7 +228,7 @@ export async function rerollWinnersAction(
       include: { team: { select: { slug: true } }, requirements: true },
     });
     if (!giveaway) return fail("Giveaway not found.");
-    await requireTeamRole(userId, giveaway.teamId, requiredGiveawayRole(giveaway.listingId));
+    await requireTeamRole(userId, giveaway.teamId, "EDITOR");
 
     if (giveaway.status !== "FINALIZED") {
       return fail("Only a giveaway with drawn winners can be re-rolled.");
@@ -256,12 +255,12 @@ export async function setEntryDisqualifiedAction(
     const entry = await db.entry.findUnique({
       where: { id: entryId },
       include: {
-        giveaway: { select: { id: true, slug: true, teamId: true, listingId: true, team: { select: { slug: true } } } },
+        giveaway: { select: { id: true, slug: true, teamId: true, team: { select: { slug: true } } } },
         winner: { select: { id: true } },
       },
     });
     if (!entry) return fail("Entry not found.");
-    await requireTeamRole(userId, entry.giveaway.teamId, requiredGiveawayRole(entry.giveaway.listingId));
+    await requireTeamRole(userId, entry.giveaway.teamId, "EDITOR");
 
     if (disqualified) {
       await db.$transaction(async (tx) => {

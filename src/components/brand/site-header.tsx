@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { collabEntryUrl } from "@/lib/collab/surface";
 import { getPrimaryTeamSlug } from "@/server/queries/teams";
+import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/brand/user-menu";
@@ -49,6 +50,7 @@ export async function SiteHeader() {
                 name={user.name ?? null}
                 email={user.email ?? null}
                 image={user.image ?? null}
+                isPlatformAdmin={isPlatformAdminEmail(user.email)}
               />
             </>
           ) : (

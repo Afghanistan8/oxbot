@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Handshake, Layers, Radio, ShieldCheck, Sparkles, Ticket } from "lucide-react";
+import { ArrowRight, ClipboardCheck, Handshake, Layers, ShieldCheck, Sparkles } from "lucide-react";
 
 import { brandCollab } from "@/lib/brand-collab";
 import { auth } from "@/lib/auth";
@@ -7,7 +7,6 @@ import { formatNumber } from "@/lib/utils";
 import { joinCollabPath } from "@/lib/collab/host";
 import { getCollabSurface, mainSiteHref } from "@/lib/collab/surface";
 import { getPrimaryTeamSlug } from "@/server/queries/teams";
-import { listPublicGiveaways } from "@/server/queries/giveaways";
 import {
   getCollabSignal,
   getFeaturedPartners,
@@ -16,16 +15,14 @@ import {
   type FeaturedPartner,
   type ListingCardData,
 } from "@/server/queries/collab-public";
-import type { GiveawayCardData } from "@/types/giveaway";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { GiveawayCard } from "@/components/giveaway/giveaway-card";
 import { CollabHowItWorks } from "@/components/collab/collab-how-it-works";
 import { ListingCard } from "@/components/collab/listing-card";
 
 /**
- * OxFoxes Collab landing — hero, live signal, listings, how it works, public
- * raffles, featured partners. Rendered at `/collab` (or `/` on the Collab host).
+ * OxFoxes Collab landing — hero, live signal, listings, how it works, and
+ * featured partners. Rendered at `/collab` (or `/` on the Collab host).
  */
 export default async function CollabLandingPage() {
   const [session, surface] = await Promise.all([auth(), getCollabSurface()]);
@@ -40,15 +37,13 @@ export default async function CollabLandingPage() {
       : { href: await mainSiteHref("/dashboard/new"), label: "Create a project" };
 
   // Render even without a database (fresh clone) — every section degrades to empty.
-  let signal: CollabSignal = { openListings: 0, spotsRemaining: 0, liveRaffles: 0 };
+  let signal: CollabSignal = { openListings: 0, spotsRemaining: 0 };
   let listings: ListingCardData[] = [];
-  let raffles: GiveawayCardData[] = [];
   let partners: FeaturedPartner[] = [];
   try {
-    [signal, listings, raffles, partners] = await Promise.all([
+    [signal, listings, partners] = await Promise.all([
       getCollabSignal(),
       listPublicListings({ sort: "ending", take: 6 }),
-      listPublicGiveaways({ collabOnly: true, sort: "ending", take: 4 }),
       getFeaturedPartners(),
     ]);
   } catch {
@@ -60,10 +55,9 @@ export default async function CollabLandingPage() {
       <Hero browseHref={href("/listings")} deskCta={deskCta} signal={signal} />
 
       <section className="container -mt-6 relative">
-        <div className="grid grid-cols-1 gap-3 rounded-3xl border border-border bg-card/60 p-3 backdrop-blur sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 rounded-3xl border border-border bg-card/60 p-3 backdrop-blur sm:grid-cols-2">
           <Signal icon={Layers} label="Open listings" value={formatNumber(signal.openListings)} />
           <Signal icon={Handshake} label="Partner spots remaining" value={formatNumber(signal.spotsRemaining)} />
-          <Signal icon={Ticket} label="Live public raffles" value={formatNumber(signal.liveRaffles)} live={signal.liveRaffles > 0} />
         </div>
       </section>
 
@@ -92,21 +86,6 @@ export default async function CollabLandingPage() {
       </div>
 
       <CollabHowItWorks guideHref={href("/guide")} />
-
-      {raffles.length > 0 && (
-        <section className="container py-16">
-          <SectionHead
-            title="Public whitelist raffles"
-            body="Spots projects opened to everyone. Complete the tasks, enter, get drawn."
-            link={{ href: href("/raffles"), label: "All raffles" }}
-          />
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {raffles.map((g) => (
-              <GiveawayCard key={g.id} giveaway={g} href={href(`/raffles/${g.slug}`)} />
-            ))}
-          </div>
-        </section>
-      )}
 
       {partners.length > 0 && (
         <section className="container py-12">
@@ -139,7 +118,7 @@ export default async function CollabLandingPage() {
                 List once. Distribute cleanly.
               </h2>
               <p className="mt-3 text-white/80">
-                Inventory that can&apos;t be oversold, criteria that score every pitch, and a wallet export when it&apos;s done.
+                Inventory that can&apos;t be oversold, one fixed intake form for every request, and a wallet export when it&apos;s done.
               </p>
             </div>
             <Button asChild size="lg" variant="gold" className="shrink-0">
@@ -172,15 +151,14 @@ function Hero({
       <div className="container relative grid gap-16 py-24 sm:py-28 lg:grid-cols-2 lg:items-center lg:py-32">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-scarlet-soft">
-            Whitelists <span className="text-muted-foreground/50">·</span> Partnerships{" "}
-            <span className="text-muted-foreground/50">·</span> Raffles
+            Whitelists <span className="text-muted-foreground/50">·</span> Partnerships
           </p>
           <h1 className="mt-5 font-display text-5xl font-black leading-[1.03] tracking-tight text-white sm:text-6xl md:text-7xl">
             Whitelist partnerships.{" "}
             <span className="text-gradient-crimson">Without the Telegram chaos.</span>
           </h1>
           <p className="mt-6 max-w-lg text-lg text-muted-foreground">
-            Projects allocate spots. DAOs and communities request them. Public raffles fill the rest.
+            Projects allocate spots. DAOs and communities request them with one fixed form.
           </p>
 
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -198,7 +176,7 @@ function Hero({
           <div className="mt-14 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-3">
             <TrustPoint icon={Layers} title="Atomic inventory" body="Never oversold." />
             <TrustPoint icon={ShieldCheck} title="Private desk" body="Applicants stay yours." />
-            <TrustPoint icon={Ticket} title="Public raffles" body="Seeded, auditable." />
+            <TrustPoint icon={ClipboardCheck} title="Fixed intake" body="Same form, every time." />
           </div>
         </div>
 
@@ -235,11 +213,11 @@ function Hero({
   );
 }
 
-function Signal({ icon: Icon, label, value, live = false }: { icon: typeof Layers; label: string; value: string; live?: boolean }) {
+function Signal({ icon: Icon, label, value }: { icon: typeof Layers; label: string; value: string }) {
   return (
     <div className="flex items-center gap-4 rounded-2xl bg-ink-black/40 px-5 py-4">
       <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-primary/30 bg-primary/10">
-        {live ? <Radio className="h-5 w-5 text-scarlet-soft" /> : <Icon className="h-5 w-5 text-scarlet-soft" />}
+        <Icon className="h-5 w-5 text-scarlet-soft" />
       </div>
       <div>
         <p className="font-display text-2xl font-bold tabular-nums text-white">{value}</p>

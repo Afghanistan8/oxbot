@@ -2,37 +2,24 @@ import { z } from "zod";
 
 import { ALL_CHAINS } from "@/lib/constants";
 import { cleanHandle, normalizeCommunityLink, type CommunityPlatform } from "@/lib/collab/socials";
-import type { AssetType, Blockchain, DistributionMethod } from "@prisma/client";
+import type { AssetType, Blockchain, ContactMethod } from "@prisma/client";
 
 /**
- * Zod schemas for every OxFoxes Collab mutation — listings, criteria,
- * templates, partner requests, reviews and allocations. Shared by the server
- * actions (authoritative) and forms (hints).
+ * Zod schemas for every OxFoxes Collab mutation — listings, partner requests,
+ * reviews and allocations. Shared by the server actions (authoritative) and
+ * forms (hints).
  */
 
 export const chainEnum = z.enum(ALL_CHAINS as [Blockchain, ...Blockchain[]]);
 export const assetTypeEnum = z.enum(["NFT", "TOKEN", "OTHER"] as [AssetType, ...AssetType[]]);
-export const methodEnum = z.enum(["FCFS", "CRITERIA", "RAFFLE", "MANUAL"] as [
-  DistributionMethod,
-  ...DistributionMethod[],
+export const contactMethodEnum = z.enum(["X", "DISCORD", "TELEGRAM"] as [
+  ContactMethod,
+  ...ContactMethod[],
 ]);
 const visibilityEnum = z.enum(["PUBLIC", "COMMUNITY", "PRIVATE"]);
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 const optionalUrl = z.string().trim().url("Enter a valid URL.").max(300).optional().or(z.literal(""));
-
-/** A non-negative whole-number threshold; null / blank = not required. */
-const threshold = z
-  .union([z.number(), z.string(), z.null()])
-  .transform((v, ctx) => {
-    if (v === null || v === "") return null;
-    const n = typeof v === "number" ? v : Number(v);
-    if (!Number.isInteger(n) || n < 0 || n > 1_000_000_000) {
-      ctx.addIssue({ code: "custom", message: "Enter a whole number, or leave blank." });
-      return z.NEVER;
-    }
-    return n === 0 ? null : n;
-  });
 
 /** Optional date from a form field ("" → undefined). */
 const optionalDate = z
@@ -46,32 +33,6 @@ const optionalDate = z
     }
     return d;
   });
-
-// --- Criteria ---------------------------------------------------------------
-
-export const customRuleSchema = z.object({
-  id: z.string().trim().min(1).max(40).regex(/^[A-Za-z0-9_-]+$/),
-  label: z.string().trim().min(2, "Describe the rule.").max(140),
-});
-
-export const criteriaSchema = z.object({
-  minCommunitySize: threshold.default(null),
-  minHolderCount: threshold.default(null),
-  minTwitterFollowers: threshold.default(null),
-  minDiscordMembers: threshold.default(null),
-  minRaffleEntries: threshold.default(null),
-  requiredChains: z.array(chainEnum).max(ALL_CHAINS.length).default([]),
-  requiredAssetType: assetTypeEnum.nullable().default(null),
-  requireVerifiedTeam: z.boolean().default(false),
-  customRules: z.array(customRuleSchema).max(10, "Up to 10 custom rules.").default([]),
-});
-
-export type CriteriaFormInput = z.infer<typeof criteriaSchema>;
-
-export const criteriaTemplateSchema = z.object({
-  name: z.string().trim().min(2, "Name the template.").max(60),
-  criteria: criteriaSchema,
-});
 
 // --- Listing ----------------------------------------------------------------
 
@@ -95,52 +56,43 @@ export const listingFormSchema = z
     tokenAddress: optionalText(120),
     mintOrTgeAt: optionalDate,
     totalSpots: spots("total spots", 1),
-    publicSpots: spots("public spots", 0),
     spotsPerRequestMin: spots("the minimum per partner", 1),
     spotsPerRequestMax: spots("the maximum per partner", 1),
-    distributionMethod: methodEnum,
     visibility: visibilityEnum,
     startAt: z.coerce.date({ message: "Pick a start time." }),
     endAt: z.coerce.date({ message: "Pick an end time." }),
     hideRequestCount: z.boolean().default(false),
     notesPrivate: optionalText(4000),
-    criteria: criteriaSchema,
   })
   .refine((d) => d.endAt.getTime() > d.startAt.getTime(), {
     message: "The window must end after it starts.",
     path: ["endAt"],
   })
-  .refine((d) => d.publicSpots <= d.totalSpots, {
-    message: "Public spots can't exceed total spots.",
-    path: ["publicSpots"],
-  })
   .refine((d) => d.spotsPerRequestMin <= d.spotsPerRequestMax, {
     message: "Minimum can't be above the maximum.",
     path: ["spotsPerRequestMin"],
   })
-  .refine((d) => d.publicSpots === d.totalSpots || d.spotsPerRequestMin <= d.totalSpots - d.publicSpots, {
-    message: "The per-partner minimum is larger than the partner inventory.",
+  .refine((d) => d.spotsPerRequestMin <= d.totalSpots, {
+    message: "The per-partner minimum is larger than total spots.",
     path: ["spotsPerRequestMin"],
   });
 
 export type ListingFormInput = z.infer<typeof listingFormSchema>;
 
-// --- Partner request --------------------------------------------------------
+// --- Partner request ---------------------------------------------------------
+//
+// The intake form is fixed — every request carries the same fields, whether
+// filed by a requester or added on their behalf by a platform admin.
 
-const optionalCount = z
-  .union([z.string(), z.number(), z.null(), z.undefined()])
-  .transform((v, ctx) => {
-    if (v === undefined || v === null || v === "") return null;
+const requiredCount = (message: string) =>
+  z.union([z.string(), z.number()]).transform((v, ctx) => {
     const n = typeof v === "number" ? v : Number(String(v).replace(/[,\s]/g, ""));
     if (!Number.isInteger(n) || n < 0 || n > 1_000_000_000) {
-      ctx.addIssue({ code: "custom", message: "Enter a whole number." });
+      ctx.addIssue({ code: "custom", message });
       return z.NEVER;
     }
     return n;
   });
-
-const requiredCount = (message: string) =>
-  optionalCount.refine((v): v is number => v !== null, { message });
 
 const communityLink = (platform: CommunityPlatform) =>
   z
@@ -157,52 +109,55 @@ const communityLink = (platform: CommunityPlatform) =>
       return out;
     });
 
+const requiredCommunityLink = (platform: CommunityPlatform) =>
+  z
+    .string()
+    .max(300)
+    .transform((v, ctx) => {
+      const out = normalizeCommunityLink(platform, v);
+      if (out && typeof out === "object") {
+        ctx.addIssue({ code: "custom", message: out.error });
+        return z.NEVER;
+      }
+      if (!out) {
+        ctx.addIssue({ code: "custom", message: "Add your X link." });
+        return z.NEVER;
+      }
+      return out;
+    });
+
 const contactHandle = z
   .string()
   .trim()
+  .min(1, "Enter a contact handle.")
   .max(64)
-  .regex(/^@?[A-Za-z0-9_.#-]*$/, "Letters, numbers, _ . - only.")
-  .optional()
-  .or(z.literal(""))
-  .transform((v) => cleanHandle(v));
+  .regex(/^@?[A-Za-z0-9_.#-]+$/, "Letters, numbers, _ . - only.")
+  .transform((v) => cleanHandle(v)!);
 
-export const requestFormSchema = z
-  .object({
-  requesterTeamId: z.string().trim().min(1, "Pick which project is requesting."),
+/** The fixed intake fields, common to a self-filed and an admin-added request. */
+const requestFieldsSchema = z.object({
   spotsRequested: z.coerce.number().int("Whole numbers only.").min(1, "Request at least 1 WL spot.").max(100_000),
-  pitch: z.string().trim().min(20, "Tell them why — at least a couple of sentences.").max(4000),
-  audienceSummary: optionalText(2000),
-  // Community
   communityName: z.string().trim().min(2, "Enter your community's name.").max(80),
-  communityX: communityLink("x"),
+  communitySize: requiredCount("Enter your community size."),
+  communityX: requiredCommunityLink("x"),
   communityDiscord: communityLink("discord"),
   communityTelegram: communityLink("telegram"),
-  communityTiktok: communityLink("tiktok"),
-  communityInstagram: communityLink("instagram"),
-  reportedRaffleEntries: requiredCount("Enter how many raffle entries your community drives (0 is fine)."),
-  // How to reach you
+  raffleProofImageUrl: optionalUrl,
   contactName: z.string().trim().min(2, "Enter a contact name.").max(80),
-  contactEmail: z.string().trim().toLowerCase().email("Enter a valid email.").max(200),
-  contactX: contactHandle,
-  contactDiscord: contactHandle,
-  contactTelegram: contactHandle,
-  communitySize: requiredCount("Enter your community size."),
-  holderCount: optionalCount,
-  twitterFollowers: optionalCount,
-  discordMembers: optionalCount,
-  requesterChains: z.array(chainEnum).max(ALL_CHAINS.length).default([]),
-  requesterAssetType: assetTypeEnum.nullable().default(null),
-  evidenceLinks: z.array(z.string().trim().url("Evidence links must be URLs.").max(300)).max(8).default([]),
-  attestations: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
-  walletForDelivery: optionalText(120),
-  deliveryChain: chainEnum.optional().or(z.literal("")),
-  })
-  .refine(
-    (d) => Boolean(d.communityX || d.communityDiscord || d.communityTelegram || d.communityTiktok || d.communityInstagram),
-    { message: "Add at least one community link.", path: ["communityLinks"] }
-  );
+  contactMethod: contactMethodEnum,
+  contactHandle,
+});
+
+export const requestFormSchema = requestFieldsSchema.extend({
+  requesterTeamId: z.string().trim().min(1, "Pick which project is requesting."),
+});
 
 export type RequestFormInput = z.infer<typeof requestFormSchema>;
+
+/** Same fixed fields, filed by a platform admin on behalf of a teamless project. */
+export const adminRequestFormSchema = requestFieldsSchema;
+
+export type AdminRequestFormInput = z.infer<typeof adminRequestFormSchema>;
 
 // --- Review -----------------------------------------------------------------
 

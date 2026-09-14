@@ -24,7 +24,7 @@ export default async function RequestAllocationPage({ params }: { params: Promis
 
   const [listing, viewer] = await Promise.all([
     getPublicListing(slug, viewerId),
-    db.user.findUnique({ where: { id: viewerId }, select: { name: true, email: true } }),
+    db.user.findUnique({ where: { id: viewerId }, select: { name: true } }),
   ]);
   if (!listing) notFound();
   if (listing.viewerIsOwner || listing.requesterTeams.length === 0) redirect(listingHref);
@@ -52,7 +52,7 @@ export default async function RequestAllocationPage({ params }: { params: Promis
           Pitch <span className="text-gradient-crimson">{listing.team.name}</span>
         </h1>
         <p className="mb-8 mt-2 max-w-xl text-sm text-muted-foreground">
-          Tell them who you are and what you&apos;ll do with the spots. Your score updates as you type.
+          Tell them who you are and how to reach you if they pick you.
         </p>
 
         <RequestForm
@@ -60,18 +60,15 @@ export default async function RequestAllocationPage({ params }: { params: Promis
             id: listing.id,
             title: listing.title,
             teamName: listing.team.name,
-            chain: listing.chain,
             spotsPerRequestMin: listing.spotsPerRequestMin,
             spotsPerRequestMax: listing.spotsPerRequestMax,
             available: listing.available,
-            distributionMethod: listing.distributionMethod,
           }}
           teams={listing.requesterTeams}
-          criteria={listing.criteria}
           dashboardBase={surface.onCollabHost ? absoluteUrl("").replace(/\/$/, "") : ""}
           listingHref={listingHref}
           blockedReason={blockedReason}
-          defaultContact={{ name: viewer?.name ?? "", email: viewer?.email ?? "" }}
+          defaultContactName={viewer?.name ?? ""}
         />
       </div>
     </main>

@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/session";
 import { requireTeamBySlug, AuthzError } from "@/lib/authz";
 import { getManagedGiveaway, getWinnerExportRows, type WinnerExportRow } from "@/server/queries/dashboard";
-import { roleAtLeast, requiredGiveawayRole } from "@/lib/constants";
 import { formatDateTime } from "@/lib/format";
 import { buildCsv } from "@/lib/csv";
 
@@ -39,13 +38,9 @@ export async function GET(
   if (!userId) return new NextResponse("Unauthorized", { status: 401 });
 
   try {
-    const { team, membership } = await requireTeamBySlug(userId, slug, "COLLAB_MANAGER");
+    const { team } = await requireTeamBySlug(userId, slug, "EDITOR");
     const giveaway = await getManagedGiveaway(team.id, id);
     if (!giveaway) return new NextResponse("Not found", { status: 404 });
-    // Collab Managers may export only Collab/whitelist raffles.
-    if (!roleAtLeast(membership.role, requiredGiveawayRole(giveaway.listingId))) {
-      return new NextResponse("Forbidden", { status: 403 });
-    }
 
     const winners = await getWinnerExportRows(id);
     const csv = buildWinnersCsv(winners);

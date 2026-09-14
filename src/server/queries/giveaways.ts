@@ -38,7 +38,6 @@ function toCardData(g: GiveawayWithTeamAndCount): GiveawayCardData {
     hideEntryCount: g.hideEntryCount,
     // Only expose a count when the creator hasn't hidden it.
     entryCount: g.hideEntryCount ? null : g._count.entries,
-    listingId: g.listingId,
     team: {
       name: g.team.name,
       slug: g.team.slug,
@@ -55,8 +54,6 @@ export type PublicGiveawayFilter = {
   /** When true, only include giveaways currently accepting entries. */
   liveOnly?: boolean;
   take?: number;
-  /** Only public whitelist raffles linked to an OxFoxes Collab listing. */
-  collabOnly?: boolean;
   /** Only one project's giveaways (public project profile). */
   teamId?: string;
 };
@@ -72,13 +69,12 @@ export type PublicGiveawayFilter = {
 export async function listPublicGiveaways(
   filter: PublicGiveawayFilter = {}
 ): Promise<GiveawayCardData[]> {
-  const { chain, sort = "ending", liveOnly = false, take = 24, collabOnly = false, teamId } = filter;
+  const { chain, sort = "ending", liveOnly = false, take = 24, teamId } = filter;
   const now = new Date();
 
   const rows = await db.giveaway.findMany({
     where: {
       visibility: { in: ["PUBLIC", "COMMUNITY"] },
-      ...(collabOnly ? { listingId: { not: null } } : {}),
       ...(teamId ? { teamId } : {}),
       status: liveOnly
         ? "ACTIVE"

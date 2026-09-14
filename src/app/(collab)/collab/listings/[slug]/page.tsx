@@ -4,15 +4,12 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import {
   CalendarClock,
-  CheckCircle2,
   Globe,
   Handshake,
   Layers,
-  ListChecks,
   Lock,
   LogIn,
   MessageCircle,
-  Ticket,
   Users,
 } from "lucide-react";
 
@@ -21,8 +18,7 @@ import { brandCollab } from "@/lib/brand-collab";
 import { absoluteUrl, formatNumber, shortenAddress } from "@/lib/utils";
 import { joinCollabPath } from "@/lib/collab/host";
 import { collabShareUrl, collabSignInHref, getCollabSurface, mainSiteHref } from "@/lib/collab/surface";
-import { LISTING_PHASE_META, METHOD_META, REQUEST_STATUS_META, listingPhase } from "@/lib/collab/constants";
-import { criteriaRows } from "@/lib/collab/format";
+import { LISTING_PHASE_META, REQUEST_STATUS_META, listingPhase } from "@/lib/collab/constants";
 import { getPublicListing, type PublicListingDetail } from "@/server/queries/collab-public";
 
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +27,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChainBadge } from "@/components/giveaway/chain-badge";
 import { Countdown } from "@/components/giveaway/countdown";
 import { LocalTime } from "@/components/local-time";
-import { AssetTypeChip, MethodChip } from "@/components/collab/collab-chips";
+import { AssetTypeChip } from "@/components/collab/collab-chips";
 import { InventoryBar } from "@/components/collab/inventory-bar";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -51,7 +47,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-/** Public listing page — inventory, criteria, request CTA, public raffle CTA. */
+/** Public listing page — inventory and the request CTA. */
 export default async function PublicListingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const [viewerId, surface] = await Promise.all([getCurrentUserId(), getCollabSurface()]);
@@ -61,9 +57,6 @@ export default async function PublicListingPage({ params }: { params: Promise<{ 
   const phase = listingPhase(listing);
   const phaseMeta = LISTING_PHASE_META[phase];
   const href = (p: string) => joinCollabPath(surface.base, p);
-  const rows = criteriaRows(listing.criteria);
-  const raffle = listing.publicRaffle;
-  const raffleLive = raffle?.status === "ACTIVE" && raffle.endAt.getTime() > Date.now();
 
   return (
     <main className="pb-20">
@@ -102,7 +95,6 @@ export default async function PublicListingPage({ params }: { params: Promise<{ 
                 )}
                 {phaseMeta.label}
               </Badge>
-              <MethodChip method={listing.distributionMethod} />
               <AssetTypeChip assetType={listing.assetType} />
               <ChainBadge chain={listing.chain} />
               {listing.visibility === "PRIVATE" && (
@@ -156,54 +148,12 @@ export default async function PublicListingPage({ params }: { params: Promise<{ 
               </div>
             )}
 
-            {raffle && (
-              <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-gold/30 bg-gold/[0.07] p-5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <Ticket className="mt-0.5 h-6 w-6 shrink-0 text-gold" />
-                  <div>
-                    <p className="font-semibold text-gold">
-                      {raffleLive ? "Public raffle open" : raffle.status === "FINALIZED" ? "Public raffle winners drawn" : "Public raffle"}
-                    </p>
-                    <p className="mt-0.5 text-sm text-muted-foreground">
-                      {formatNumber(listing.publicSpots)} spots go to the community. No project needed — complete the tasks to enter.
-                    </p>
-                  </div>
-                </div>
-                <Button asChild variant="gold" className="shrink-0">
-                  <Link href={href(`/raffles/${raffle.slug}`)}>{raffleLive ? "Enter raffle" : "View raffle"}</Link>
-                </Button>
-              </div>
-            )}
-
             {listing.description && (
               <div className="mt-6 rounded-2xl border border-border bg-card/40 p-6">
                 <h2 className="mb-2 font-display text-lg font-semibold text-white">Details</h2>
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/85">{listing.description}</p>
               </div>
             )}
-
-            <div className="mt-6 rounded-2xl border border-border bg-card/40 p-6">
-              <h2 className="mb-1 flex items-center gap-2 font-display text-lg font-semibold text-white">
-                <ListChecks className="h-5 w-5 text-scarlet-soft" />
-                Who qualifies
-              </h2>
-              <p className="mb-4 text-sm text-muted-foreground">{METHOD_META[listing.distributionMethod].blurb}</p>
-              {rows.length === 0 ? (
-                <p className="text-sm text-foreground/85">Open to every project and community.</p>
-              ) : (
-                <ul className="grid gap-2 sm:grid-cols-2">
-                  {rows.map((r) => (
-                    <li key={r.label} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-ink-black/30 px-4 py-2.5 text-sm">
-                      <span className="flex items-center gap-2 text-foreground/90">
-                        <CheckCircle2 className="h-4 w-4 text-scarlet-soft" />
-                        {r.label}
-                      </span>
-                      <span className="shrink-0 font-medium text-white">{r.value}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
 
             <ProjectFacts listing={listing} />
           </div>
@@ -284,12 +234,10 @@ async function RequestPanel({
           {phase === "upcoming"
             ? "Requests open soon — check back when the countdown hits zero."
             : phase === "allocated"
-              ? "Every partner spot is spoken for. Watch for a public raffle, or check back if spots free up."
+              ? "Every partner spot is spoken for. Check back if spots free up."
               : phase === "paused"
                 ? "The project has paused new requests for now."
-                : listing.drawnAt
-                  ? "The partner raffle has been drawn. Requests are closed."
-                  : "Requests are closed for this listing."}
+                : "Requests are closed for this listing."}
         </p>
       ) : !viewerId ? (
         <div className="space-y-3">
@@ -315,7 +263,7 @@ async function RequestPanel({
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Pitch your community, share your numbers, and see your eligibility score before you submit.
+            Fill in a short fixed form: your community, and how to reach you if chosen.
           </p>
           <Button asChild size="lg" className="w-full">
             <Link href={requestHref}>

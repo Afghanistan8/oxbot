@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { requireUser } from "@/lib/session";
 import { getTeamsForUser } from "@/server/queries/teams";
+import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { Logo } from "@/components/brand/logo";
 import { UserMenu } from "@/components/brand/user-menu";
 import { DashboardNav } from "@/components/dashboard/dashboard-nav";
@@ -42,6 +43,7 @@ export default async function DashboardLayout({
               name={user.name ?? null}
               email={user.email ?? null}
               image={user.image ?? null}
+              isPlatformAdmin={isPlatformAdminEmail(user.email)}
             />
           </div>
         </div>

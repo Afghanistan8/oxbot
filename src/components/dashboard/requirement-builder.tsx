@@ -11,8 +11,6 @@ import {
   MessageCircle,
   Shield,
   Wallet,
-  Gem,
-  Coins,
   Plus,
   Trash2,
   ChevronUp,
@@ -62,12 +60,6 @@ export type ReqDraft = {
   inviteUrl: string;
   caseSensitive: boolean;
   chain: Blockchain | "";
-  // NFT_HOLD / TOKEN_BALANCE
-  contractAddress: string;
-  minCount: string;
-  tokenIds: string; // comma/space separated in the UI
-  minBalance: string;
-  label: string;
 };
 
 const ICONS: Record<RequirementType, LucideIcon> = {
@@ -80,8 +72,6 @@ const ICONS: Record<RequirementType, LucideIcon> = {
   DISCORD_MEMBER: MessageCircle,
   DISCORD_ROLE: Shield,
   WALLET: Wallet,
-  NFT_HOLD: Gem,
-  TOKEN_BALANCE: Coins,
 };
 
 const ADD_GROUPS: { label: string; types: RequirementType[] }[] = [
@@ -89,7 +79,6 @@ const ADD_GROUPS: { label: string; types: RequirementType[] }[] = [
   { label: "X (Twitter)", types: ["TWITTER_FOLLOW", "TWITTER_LIKE", "TWITTER_RETWEET"] },
   { label: "Discord", types: ["DISCORD_MEMBER", "DISCORD_ROLE"] },
   { label: "Wallet", types: ["WALLET"] },
-  { label: "Holdings", types: ["NFT_HOLD", "TOKEN_BALANCE"] },
 ];
 
 let keyCounter = 0;
@@ -112,12 +101,7 @@ export function emptyDraft(type: RequirementType): ReqDraft {
     roleIds: "",
     inviteUrl: "",
     caseSensitive: false,
-    chain: type === "NFT_HOLD" || type === "TOKEN_BALANCE" ? "ETHEREUM" : "",
-    contractAddress: "",
-    minCount: "1",
-    tokenIds: "",
-    minBalance: "",
-    label: "",
+    chain: "",
   };
 }
 
@@ -136,11 +120,6 @@ export function draftsFromRequirements(reqs: ManagedRequirement[]): ReqDraft[] {
       inviteUrl: typeof c.inviteUrl === "string" ? c.inviteUrl : "",
       caseSensitive: Boolean(c.caseSensitive),
       chain: typeof c.chain === "string" ? (c.chain as Blockchain) : "",
-      contractAddress: typeof c.contractAddress === "string" ? c.contractAddress : "",
-      minCount: typeof c.minCount === "number" ? String(c.minCount) : "1",
-      tokenIds: Array.isArray(c.tokenIds) ? (c.tokenIds as string[]).join(", ") : "",
-      minBalance: typeof c.minBalance === "string" ? c.minBalance : "",
-      label: typeof c.label === "string" ? c.label : "",
     };
   });
 }
@@ -173,26 +152,6 @@ export function serializeRequirements(drafts: ReqDraft[]): unknown[] {
         if (d.chain) out.chain = d.chain;
         return out;
       }
-      case "NFT_HOLD":
-        return {
-          ...base,
-          chain: d.chain || "ETHEREUM",
-          contractAddress: d.contractAddress.trim(),
-          minCount: Number(d.minCount) || 1,
-          tokenIds: d.tokenIds
-            .split(/[\s,]+/)
-            .map((s) => s.trim())
-            .filter(Boolean),
-          label: d.label.trim(),
-        };
-      case "TOKEN_BALANCE":
-        return {
-          ...base,
-          chain: d.chain || "ETHEREUM",
-          contractAddress: d.contractAddress.trim(),
-          minBalance: d.minBalance.trim(),
-          label: d.label.trim(),
-        };
       default:
         return base; // CAPTCHA, EMAIL
     }
@@ -214,11 +173,6 @@ export function requirementDraftError(d: ReqDraft): string | null {
       return d.roleIds.split(/[\s,]+/).filter(Boolean).length
         ? null
         : "Add at least one Discord role.";
-    case "NFT_HOLD":
-      return d.contractAddress.trim() ? null : "Enter the collection's contract address.";
-    case "TOKEN_BALANCE":
-      if (!d.contractAddress.trim()) return "Enter the token's contract address.";
-      return /^\d+(\.\d+)?$/.test(d.minBalance.trim()) ? null : "Enter a minimum balance.";
     default:
       return null;
   }
@@ -516,98 +470,6 @@ function ConfigFields({
           </select>
         </Field>
       );
-    case "NFT_HOLD":
-    case "TOKEN_BALANCE": {
-      const isNft = draft.type === "NFT_HOLD";
-      return (
-        <div className="mt-3 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-[10rem_1fr]">
-            <Field>
-              <Label htmlFor={`hc-${k}`}>Chain</Label>
-              <select
-                id={`hc-${k}`}
-                value={draft.chain || "ETHEREUM"}
-                onChange={(e) => patch(k, { chain: e.target.value as Blockchain })}
-                disabled={disabled}
-                className="flex h-10 w-full rounded-xl border border-input bg-ink-charcoal/60 px-3 text-sm text-foreground focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-              >
-                {ALL_CHAINS.map((chain) => (
-                  <option key={chain} value={chain}>
-                    {CHAIN_META[chain].label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field>
-              <Label htmlFor={`ca-${k}`}>{isNft ? "Collection contract / address" : "Token contract / mint"}</Label>
-              <Input
-                id={`ca-${k}`}
-                value={draft.contractAddress}
-                onChange={(e) => patch(k, { contractAddress: e.target.value })}
-                placeholder={draft.chain === "SOLANA" ? "Collection or mint address" : "0x…"}
-                className="font-mono"
-                disabled={disabled}
-              />
-            </Field>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-[10rem_1fr]">
-            {isNft ? (
-              <Field>
-                <Label htmlFor={`mc-${k}`}>Minimum held</Label>
-                <Input
-                  id={`mc-${k}`}
-                  type="number"
-                  min={1}
-                  value={draft.minCount}
-                  onChange={(e) => patch(k, { minCount: e.target.value })}
-                  disabled={disabled}
-                />
-              </Field>
-            ) : (
-              <Field>
-                <Label htmlFor={`mb-${k}`}>Minimum balance</Label>
-                <Input
-                  id={`mb-${k}`}
-                  inputMode="decimal"
-                  value={draft.minBalance}
-                  onChange={(e) => patch(k, { minBalance: e.target.value })}
-                  placeholder="100"
-                  disabled={disabled}
-                />
-              </Field>
-            )}
-            <Field>
-              <Label htmlFor={`lb-${k}`}>{isNft ? "Collection name" : "Token symbol"} (shown to entrants)</Label>
-              <Input
-                id={`lb-${k}`}
-                value={draft.label}
-                onChange={(e) => patch(k, { label: e.target.value })}
-                placeholder={isNft ? "Lava Foxes" : "LAVA"}
-                maxLength={60}
-                disabled={disabled}
-              />
-            </Field>
-          </div>
-          {isNft && (
-            <details className="group">
-              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-white">
-                Only specific token ids count (optional)
-              </summary>
-              <Input
-                value={draft.tokenIds}
-                onChange={(e) => patch(k, { tokenIds: e.target.value })}
-                placeholder="Comma-separated token ids, e.g. 1, 42, 777"
-                disabled={disabled}
-                className="mt-2 font-mono"
-              />
-            </details>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Checked against the entrant&apos;s saved wallet. In mock mode a saved wallet plus an “I hold this” confirmation completes it.
-          </p>
-        </div>
-      );
-    }
     default:
       return null; // CAPTCHA, EMAIL need no config
   }

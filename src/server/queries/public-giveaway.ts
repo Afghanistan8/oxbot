@@ -75,8 +75,6 @@ export type PublicGiveawayDetail = {
   requirements: PublicRequirement[];
   /** Present only when the viewer is signed in AND has an entry. */
   viewerEntry: ViewerEntry | null;
-  /** The OxFoxes Collab listing this raffle distributes public spots for. */
-  listing: { slug: string; title: string; visibility: GiveawayVisibility } | null;
 };
 
 /**
@@ -106,7 +104,6 @@ export async function getPublicGiveaway(
       },
       requirements: { orderBy: { order: "asc" } },
       _count: { select: { entries: true } },
-      listing: { select: { slug: true, title: true, visibility: true, status: true } },
     },
   });
 
@@ -171,10 +168,6 @@ export async function getPublicGiveaway(
     team: g.team,
     requirements,
     viewerEntry,
-    listing:
-      g.listing && g.listing.status !== "DRAFT" && g.listing.status !== "CANCELLED"
-        ? { slug: g.listing.slug, title: g.listing.title, visibility: g.listing.visibility }
-        : null,
   };
 }
 

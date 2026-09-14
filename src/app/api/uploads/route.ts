@@ -13,7 +13,7 @@ import { storeUpload } from "@/lib/integrations/uploads";
  */
 export const dynamic = "force-dynamic";
 
-const ALLOWED_FOLDERS = new Set(["logos", "banners", "misc"]);
+const ALLOWED_FOLDERS = new Set(["logos", "banners", "misc", "collab-proof"]);
 
 export async function POST(req: Request) {
   const userId = await getCurrentUserId();

@@ -1,12 +1,11 @@
 import Link from "next/link";
-import { Layers, Inbox, Ticket, Lock } from "lucide-react";
+import { Layers, Inbox, Lock } from "lucide-react";
 
 import type { DashboardListing } from "@/server/queries/collab";
 import { LISTING_PHASE_META, listingPhase } from "@/lib/collab/constants";
 import { formatNumber } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { ChainBadge } from "@/components/giveaway/chain-badge";
-import { MethodChip } from "@/components/collab/collab-chips";
 import { InventoryBar } from "@/components/collab/inventory-bar";
 
 /** DashboardListingRow — compact founder-side row linking into listing management. */
@@ -33,7 +32,6 @@ export function DashboardListingRow({ listing, teamSlug }: { listing: DashboardL
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={phaseMeta.badge}>{phaseMeta.label}</Badge>
-          <MethodChip method={listing.distributionMethod} />
           <ChainBadge chain={listing.chain} showLabel={false} />
           {listing.visibility === "PRIVATE" && (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -48,7 +46,6 @@ export function DashboardListingRow({ listing, teamSlug }: { listing: DashboardL
       <div className="flex shrink-0 items-center gap-5 text-xs text-muted-foreground">
         <Stat icon={Layers} label="available" value={`${formatNumber(listing.available)}/${formatNumber(listing.totalSpots)}`} />
         <Stat icon={Inbox} label="to review" value={formatNumber(listing.openRequestCount)} highlight={listing.openRequestCount > 0} />
-        {listing.publicRaffle && <Stat icon={Ticket} label="raffle" value={listing.publicRaffle.status.toLowerCase()} />}
       </div>
     </Link>
   );

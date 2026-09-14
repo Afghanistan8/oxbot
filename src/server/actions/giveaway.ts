@@ -209,7 +209,6 @@ export async function updateGiveawayAction(
       where: { id: giveawayId },
       include: {
         team: { select: { slug: true } },
-        listing: { select: { publicSpots: true } },
       },
     });
     if (!giveaway) return fail("Giveaway not found.");
@@ -220,9 +219,6 @@ export async function updateGiveawayAction(
       return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
     }
     const data = parsed.data;
-    // A Collab public raffle's winner count IS the listing's public slice —
-    // it's changed from the listing so inventory math stays in one place.
-    if (giveaway.listing) data.winnersCount = giveaway.listing.publicSpots;
     // FCFS closes on slots-claimed, not the clock — keep the sentinel end date.
     if (data.type === "FCFS") data.endAt = FCFS_SENTINEL_END_AT;
 
@@ -271,14 +267,11 @@ export async function updateGiveawayAction(
 
     revalidatePath(`/dashboard/${giveaway.team.slug}/giveaways/${giveawayId}`);
     revalidatePath(`/giveaways/${giveaway.slug}`);
-    if (giveaway.listingId) revalidatePath(`/collab/raffles/${giveaway.slug}`);
     return ok(
       undefined,
       entryCount > 0
         ? "Saved. Requirements are locked because entries exist."
-        : giveaway.listing
-          ? "Raffle saved. Winner count follows the listing's public spots."
-          : "Giveaway saved."
+        : "Giveaway saved."
     );
   });
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useMemo, useState, type ReactNode } from "react";
+import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
-import type { Blockchain, GiveawayType, RequirementType } from "@prisma/client";
+import type { GiveawayType, RequirementType } from "@prisma/client";
 import {
   ShieldCheck,
   Mail,
@@ -13,8 +13,6 @@ import {
   MessageCircle,
   Shield,
   Wallet,
-  Gem,
-  Coins,
   CheckCircle2,
   XCircle,
   Circle,
@@ -32,8 +30,7 @@ import { oauthSignInAction } from "@/server/actions/auth";
 import type { ActionState } from "@/server/actions/_result";
 import type { PublicRequirement, ViewerEntry } from "@/server/queries/public-giveaway";
 import type { GiveawayPhase } from "@/lib/format";
-import { CHAIN_META, EVM_CHAINS, HOLDING_REQUIREMENTS, REQUIREMENT_META } from "@/lib/constants";
-import { Checkbox } from "@/components/ui/checkbox";
+import { REQUIREMENT_META } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,8 +61,6 @@ const REQ_ICONS: Record<RequirementType, LucideIcon> = {
   DISCORD_MEMBER: MessageCircle,
   DISCORD_ROLE: Shield,
   WALLET: Wallet,
-  NFT_HOLD: Gem,
-  TOKEN_BALANCE: Coins,
 };
 
 const SUBMIT_LABEL: Record<GiveawayType, string> = {
@@ -92,10 +87,6 @@ export type EntryWizardProps = {
   /** Social context used to build "do the task" links. */
   xAccount: string | null;
   discordInvite: string | null;
-  /** Chains the viewer has a saved profile wallet on (holding tasks). */
-  walletChains?: Blockchain[];
-  /** True when NFT / token holdings are verified on-chain (not mocked). */
-  nftLive?: boolean;
   /** Page to return to after sign-in / account linking. Defaults to the giveaway page. */
   returnPath?: string;
 };
@@ -121,8 +112,6 @@ export function EntryWizard(props: EntryWizardProps) {
     viewerEntry,
     xAccount,
     discordInvite,
-    walletChains = [],
-    nftLive = false,
   } = props;
   const returnPath = props.returnPath ?? `/giveaways/${slug}`;
 
@@ -175,19 +164,6 @@ export function EntryWizard(props: EntryWizardProps) {
   const needsCode = types.has("CODE");
   const needsEmail = types.has("EMAIL") && !hasAccountEmail;
   const hasWallet = types.has("WALLET");
-
-  // Holding tasks check a saved wallet on the task's chain (any EVM wallet
-  // covers EVM chains); without one, the entrant pastes an address below.
-  const walletSavedFor = (chain: string | undefined) =>
-    Boolean(
-      chain &&
-        (walletChains.includes(chain as Blockchain) ||
-          (EVM_CHAINS.includes(chain as Blockchain) && walletChains.some((c) => EVM_CHAINS.includes(c))))
-    );
-  const holdingReqs = requirements.filter((r) => HOLDING_REQUIREMENTS.includes(r.type));
-  const holdingNeedsPastedWallet = holdingReqs.some((r) => !walletSavedFor(r.config.chain));
-  const showWalletInput = hasWallet || holdingNeedsPastedWallet;
-  const [attested, setAttested] = useState<Set<string>>(new Set());
   const [walletAddress, setWalletAddress] = useState("");
 
   // Required X tasks that have a real link to open — these are gated on the
@@ -206,7 +182,7 @@ export function EntryWizard(props: EntryWizardProps) {
   // Nudge signed-in entrants to save a wallet on their profile when this
   // giveaway doesn't collect one at entry — so their prize wallet is on file
   // for the winners export if they win.
-  const showWalletNudge = isSignedIn && !showWalletInput && !hasProfileWallet;
+  const showWalletNudge = isSignedIn && !hasWallet && !hasProfileWallet;
 
   // Live-mode account-linking prompts (mock mode auto-verifies, so none needed).
   const needTwitterConnect =
@@ -317,24 +293,6 @@ export function EntryWizard(props: EntryWizardProps) {
               gated={xGateReqIds.includes(req.id)}
               opened={openedTasks.has(req.id)}
               onOpen={() => markOpened(req.id)}
-              extra={
-                HOLDING_REQUIREMENTS.includes(req.type) ? (
-                  <HoldingControls
-                    req={req}
-                    walletSaved={walletSavedFor(req.config.chain)}
-                    nftLive={nftLive}
-                    attested={attested.has(req.id)}
-                    onAttest={(v) =>
-                      setAttested((prev) => {
-                        const next = new Set(prev);
-                        if (v) next.add(req.id);
-                        else next.delete(req.id);
-                        return next;
-                      })
-                    }
-                  />
-                ) : null
-              }
             />
           ))}
           {requirements.length === 0 && (
@@ -346,11 +304,7 @@ export function EntryWizard(props: EntryWizardProps) {
         </ul>
 
         {/* User-supplied inputs, only when a requirement needs them */}
-        {[...attested].map((id) => (
-          <input key={id} type="hidden" name="holdAttest" value={id} />
-        ))}
-
-        {(needsCode || needsEmail || showWalletInput) && (
+        {(needsCode || needsEmail || hasWallet) && (
           <div className="space-y-3 rounded-2xl border border-border bg-ink-black/40 p-4">
             {needsCode && (
               <div>
@@ -379,14 +333,9 @@ export function EntryWizard(props: EntryWizardProps) {
                 <FieldError errors={state.fieldErrors?.email} />
               </div>
             )}
-            {showWalletInput && (
+            {hasWallet && (
               <div>
-                <Label htmlFor="walletAddress">
-                  Wallet address
-                  {!hasWallet && (
-                    <span className="font-normal text-muted-foreground"> (checked for holdings)</span>
-                  )}
-                </Label>
+                <Label htmlFor="walletAddress">Wallet address</Label>
                 <Input
                   id="walletAddress"
                   name="walletAddress"
@@ -482,7 +431,6 @@ function TaskRow({
   gated = false,
   opened = false,
   onOpen,
-  extra,
 }: {
   req: PublicRequirement;
   status: RowStatus;
@@ -494,8 +442,6 @@ function TaskRow({
   /** True once the entrant has clicked this task's link. */
   opened?: boolean;
   onOpen?: () => void;
-  /** Task-specific controls rendered under the description (holding tasks). */
-  extra?: ReactNode;
 }) {
   const meta = REQUIREMENT_META[req.type];
   const Icon = REQ_ICONS[req.type];
@@ -557,7 +503,6 @@ function TaskRow({
             {opened ? "✓ Opened — you can enter now" : "Required: open the link above first"}
           </p>
         )}
-        {extra}
       </div>
       <StatusIcon className={cn("mt-0.5 h-5 w-5 shrink-0", statusColor)} />
     </li>
@@ -581,59 +526,9 @@ function taskLabel(req: PublicRequirement): string {
         : "Join the Discord server";
     case "DISCORD_ROLE":
       return "Hold the required Discord role";
-    case "NFT_HOLD": {
-      const n = c.minCount ?? 1;
-      const chain = c.chain && c.chain in CHAIN_META ? ` on ${CHAIN_META[c.chain as Blockchain].label}` : "";
-      return `Hold ${n > 1 ? `${n}+` : "a"} ${c.label || "collection"} NFT${n > 1 ? "s" : ""}${chain}`;
-    }
-    case "TOKEN_BALANCE": {
-      const chain = c.chain && c.chain in CHAIN_META ? ` on ${CHAIN_META[c.chain as Blockchain].label}` : "";
-      return `Hold ${c.minBalance ?? ""} ${c.label || "tokens"}${chain}`.replace(/\s+/g, " ");
-    }
     default:
       return REQUIREMENT_META[req.type].label;
   }
-}
-
-/** Wallet status + (in mock mode) the "I hold this" confirmation for a holding task. */
-function HoldingControls({
-  req,
-  walletSaved,
-  nftLive,
-  attested,
-  onAttest,
-}: {
-  req: PublicRequirement;
-  walletSaved: boolean;
-  nftLive: boolean;
-  attested: boolean;
-  onAttest: (v: boolean) => void;
-}) {
-  const chainLabel = req.config.chain && req.config.chain in CHAIN_META
-    ? CHAIN_META[req.config.chain as Blockchain].label
-    : "the right chain";
-  return (
-    <div className="mt-2 space-y-1.5">
-      <p className="text-[11px] text-muted-foreground">
-        {walletSaved ? (
-          <>Checked against your saved {chainLabel} wallet.</>
-        ) : (
-          <>
-            No {chainLabel} wallet on your profile — paste one below or{" "}
-            <Link href="/profile" className="text-scarlet-soft hover:text-white">
-              save it once
-            </Link>
-            .
-          </>
-        )}
-      </p>
-      {!nftLive && (
-        <label className="flex items-center gap-2 text-xs text-foreground/90">
-          <Checkbox checked={attested} onCheckedChange={(v) => onAttest(v === true)} />I hold this
-        </label>
-      )}
-    </div>
-  );
 }
 
 function taskCta(type: RequirementType): string {

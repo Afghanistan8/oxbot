@@ -21,7 +21,7 @@ export function ImageUploadField({
 }: {
   name: string;
   label: string;
-  folder: "logos" | "banners";
+  folder: "logos" | "banners" | "collab-proof";
   defaultValue?: string | null;
   aspect?: "square" | "wide";
 }) {

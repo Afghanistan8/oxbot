@@ -7,12 +7,10 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUserId } from "@/lib/session";
 import { requireTeamRole, AuthzError } from "@/lib/authz";
+import { requirePlatformAdmin } from "@/lib/platform-admin";
 import { recordAudit } from "@/lib/audit";
 import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
-import { uniqueGiveawaySlug, uniqueListingSlug } from "@/lib/slug";
-import { FCFS_SENTINEL_END_AT } from "@/lib/format";
-import { requirementSchema } from "@/lib/validation/giveaway";
-import { publishGiveawayAction } from "@/server/actions/giveaway";
+import { uniqueListingSlug } from "@/lib/slug";
 import {
   InventoryError,
   assertCapacity,
@@ -21,20 +19,16 @@ import {
   transitionAllocation,
 } from "@/lib/collab/inventory";
 import { OPEN_REQUEST_STATUSES } from "@/lib/collab/constants";
-import { criteriaFromRow, evaluateEligibility } from "@/lib/collab/eligibility";
-import { RequestRuleError, approveRequest, drawPartnerRaffle, fileRequest } from "@/lib/collab/requests";
+import { RequestRuleError, approveRequest, fileRequest } from "@/lib/collab/requests";
 import { notifyRequestDecision } from "@/lib/collab/notify";
-import { generateDrawSeed } from "@/lib/giveaway/winner-selection";
-import { getTeamPlatformFacts } from "@/server/queries/collab";
 import {
+  adminRequestFormSchema,
   allocationWalletsSchema,
-  criteriaTemplateSchema,
   listingFormSchema,
   parseWalletLines,
   requestFormSchema,
   requesterReplySchema,
   reviewDecisionSchema,
-  type CriteriaFormInput,
   type ListingFormInput,
 } from "@/lib/validation/collab";
 import { ActionState, ok, fail, runAction, zodFieldErrors } from "./_result";
@@ -43,9 +37,10 @@ import type { Prisma, RequestStatus } from "@prisma/client";
 /**
  * OxFoxes Collab server actions.
  *
- * Every action: Zod-validates input, authorizes against the acting team's role,
- * is rate-limited per user, and writes an AuditLog entry. Anything that moves
- * spots runs in a transaction that row-locks the listing (lib/collab/inventory).
+ * Every action: Zod-validates input, authorizes against the acting team's role
+ * (or platform-admin status), is rate-limited per user, and writes an
+ * AuditLog entry. Anything that moves spots runs in a transaction that
+ * row-locks the listing (lib/collab/inventory).
  */
 
 function checkMutateLimit(userId: string) {
@@ -63,31 +58,6 @@ function revalidateListing(teamSlug: string, listing: { id: string; slug: string
   revalidatePath(`/collab/listings/${listing.slug}`);
 }
 
-/** Map validated criteria to DB columns. */
-function criteriaColumns(c: CriteriaFormInput) {
-  return {
-    minCommunitySize: c.minCommunitySize,
-    minHolderCount: c.minHolderCount,
-    minTwitterFollowers: c.minTwitterFollowers,
-    minDiscordMembers: c.minDiscordMembers,
-    minRaffleEntries: c.minRaffleEntries,
-    requiredChains: c.requiredChains,
-    requiredAssetType: c.requiredAssetType,
-    requireVerifiedTeam: c.requireVerifiedTeam,
-    customRules: c.customRules as unknown as Prisma.InputJsonValue,
-  };
-}
-
-function parseJsonField(formData: FormData, key: string): unknown {
-  const raw = formData.get(key);
-  if (typeof raw !== "string" || !raw.trim()) return undefined;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-}
-
 const bool = (v: FormDataEntryValue | null) => v === "true" || v === "on";
 
 function parseListingForm(formData: FormData) {
@@ -103,16 +73,13 @@ function parseListingForm(formData: FormData) {
     tokenAddress: formData.get("tokenAddress") || "",
     mintOrTgeAt: formData.get("mintOrTgeAt") || "",
     totalSpots: formData.get("totalSpots"),
-    publicSpots: formData.get("publicSpots") || 0,
     spotsPerRequestMin: formData.get("spotsPerRequestMin"),
     spotsPerRequestMax: formData.get("spotsPerRequestMax"),
-    distributionMethod: formData.get("distributionMethod"),
     visibility: formData.get("visibility"),
     startAt: formData.get("startAt"),
     endAt: formData.get("endAt"),
     hideRequestCount: bool(formData.get("hideRequestCount")),
     notesPrivate: formData.get("notesPrivate") || "",
-    criteria: parseJsonField(formData, "criteria") ?? {},
   });
 }
 
@@ -130,7 +97,6 @@ function listingColumns(data: ListingFormInput) {
     tokenAddress: isToken ? data.tokenAddress || null : null,
     mintOrTgeAt: data.mintOrTgeAt ?? null,
     totalSpots: data.totalSpots,
-    publicSpots: data.publicSpots,
     spotsPerRequestMin: data.spotsPerRequestMin,
     spotsPerRequestMax: data.spotsPerRequestMax,
     visibility: data.visibility,
@@ -173,10 +139,8 @@ export async function createListingAction(
         ...listingColumns(data),
         teamId,
         slug,
-        distributionMethod: data.distributionMethod,
         status: publish ? "OPEN" : "DRAFT",
         createdById: userId,
-        criteria: { create: criteriaColumns(data.criteria) },
       },
     });
 
@@ -185,13 +149,7 @@ export async function createListingAction(
       actorId: userId,
       action: "listing.create",
       target: listing.id,
-      meta: {
-        title: listing.title,
-        method: listing.distributionMethod,
-        totalSpots: listing.totalSpots,
-        publicSpots: listing.publicSpots,
-        published: publish,
-      },
+      meta: { title: listing.title, totalSpots: listing.totalSpots, published: publish },
     });
 
     revalidateListing(team.slug, listing);
@@ -217,8 +175,6 @@ export async function updateListingAction(
       where: { id: listingId },
       include: {
         team: { select: { slug: true } },
-        publicRaffle: { select: { id: true, status: true, _count: { select: { winners: true } } } },
-        _count: { select: { requests: true } },
       },
     });
     if (!existing) return fail("Listing not found.");
@@ -229,42 +185,14 @@ export async function updateListingAction(
     if (!parsed.success) return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
     const data = parsed.data;
 
-    const raffle = existing.publicRaffle;
-    if (raffle && data.publicSpots !== existing.publicSpots) {
-      if (raffle.status === "FINALIZED" || raffle._count.winners > 0) {
-        return fail("The public raffle has already been drawn — public spots are locked.", {
-          publicSpots: ["Locked: the public raffle has been drawn."],
-        });
-      }
-      if (data.publicSpots < 1) {
-        return fail("This listing has a public raffle — keep at least 1 public spot, or cancel the raffle first.", {
-          publicSpots: ["Keep at least 1 public spot while the raffle exists."],
-        });
-      }
-    }
-
-    // Method is locked once requests exist — changing the rules mid-flight is unfair.
-    const methodLocked = existing._count.requests > 0 && data.distributionMethod !== existing.distributionMethod;
-
     try {
       await db.$transaction(async (tx) => {
         const locked = await lockListing(tx, listingId);
         assertCapacity(locked, data);
         await tx.whitelistListing.update({
           where: { id: listingId },
-          data: {
-            ...listingColumns(data),
-            ...(methodLocked ? {} : { distributionMethod: data.distributionMethod }),
-          },
+          data: listingColumns(data),
         });
-        await tx.listingCriteria.upsert({
-          where: { listingId },
-          create: { listingId, ...criteriaColumns(data.criteria) },
-          update: criteriaColumns(data.criteria),
-        });
-        if (raffle && data.publicSpots !== existing.publicSpots) {
-          await tx.giveaway.update({ where: { id: raffle.id }, data: { winnersCount: data.publicSpots } });
-        }
         await resyncListingStatus(tx, listingId);
       });
     } catch (err) {
@@ -279,15 +207,11 @@ export async function updateListingAction(
       actorId: userId,
       action: "listing.update",
       target: listingId,
-      meta: { totalSpots: data.totalSpots, publicSpots: data.publicSpots, methodLocked },
+      meta: { totalSpots: data.totalSpots },
     });
 
     revalidateListing(existing.team.slug, existing);
-    if (raffle) revalidatePath(`/dashboard/${existing.team.slug}/giveaways/${raffle.id}`);
-    return ok(
-      undefined,
-      methodLocked ? "Saved. The distribution method is locked because requests exist." : "Listing saved."
-    );
+    return ok(undefined, "Listing saved.");
   });
 }
 
@@ -323,14 +247,6 @@ async function transitionListing(listingId: string, op: LifecycleOp): Promise<Ac
     }
     if ((op === "publish" || op === "resume") && listing.endAt.getTime() <= Date.now()) {
       return fail("The listing window has already ended — extend the end time first.");
-    }
-    if (op === "close" && listing.distributionMethod === "RAFFLE" && !listing.drawnAt) {
-      const pending = await db.collabRequest.count({
-        where: { listingId, status: { in: OPEN_REQUEST_STATUSES }, eligible: true },
-      });
-      if (pending > 0) {
-        return fail("Run the partner raffle draw first — it closes the listing and allocates the winners.");
-      }
     }
 
     let expired = 0;
@@ -379,86 +295,11 @@ export async function cancelListingAction(listingId: string) {
   return transitionListing(listingId, "cancel");
 }
 
-// --- Criteria templates ------------------------------------------------------
-
-export async function saveCriteriaTemplateAction(
-  teamId: string,
-  templateId: string | null,
-  _prev: unknown,
-  formData: FormData
-): Promise<ActionState> {
-  const userId = await requireUserId();
-  return runAction(async () => {
-    checkMutateLimit(userId);
-    await requireTeamRole(userId, teamId, "COLLAB_MANAGER");
-
-    const parsed = criteriaTemplateSchema.safeParse({
-      name: formData.get("name"),
-      criteria: parseJsonField(formData, "criteria") ?? {},
-    });
-    if (!parsed.success) return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
-    const { name, criteria } = parsed.data;
-
-    let id = templateId;
-    if (templateId) {
-      const existing = await db.listingCriteria.findFirst({
-        where: { id: templateId, templateTeamId: teamId, listingId: null },
-        select: { id: true },
-      });
-      if (!existing) return fail("Template not found.");
-      await db.listingCriteria.update({ where: { id: templateId }, data: { name, ...criteriaColumns(criteria) } });
-    } else {
-      const created = await db.listingCriteria.create({
-        data: { templateTeamId: teamId, name, ...criteriaColumns(criteria) },
-      });
-      id = created.id;
-    }
-
-    await recordAudit({
-      teamId,
-      actorId: userId,
-      action: "criteria_template.save",
-      target: id,
-      meta: { name, created: !templateId },
-    });
-
-    const team = await db.team.findUniqueOrThrow({ where: { id: teamId }, select: { slug: true } });
-    revalidatePath(`/dashboard/${team.slug}/collab/criteria`);
-    return ok(undefined, templateId ? "Template updated." : "Template saved.");
-  });
-}
-
-export async function deleteCriteriaTemplateAction(templateId: string): Promise<ActionState> {
-  const userId = await requireUserId();
-  return runAction(async () => {
-    checkMutateLimit(userId);
-    const template = await db.listingCriteria.findUnique({
-      where: { id: templateId },
-      include: { templateTeam: { select: { slug: true } } },
-    });
-    if (!template?.templateTeamId || template.listingId) return fail("Template not found.");
-    await requireTeamRole(userId, template.templateTeamId, "COLLAB_MANAGER");
-
-    await db.listingCriteria.delete({ where: { id: templateId } });
-    await recordAudit({
-      teamId: template.templateTeamId,
-      actorId: userId,
-      action: "criteria_template.delete",
-      target: templateId,
-      meta: { name: template.name },
-    });
-
-    revalidatePath(`/dashboard/${template.templateTeam?.slug}/collab/criteria`);
-    return ok(undefined, "Template deleted.");
-  });
-}
-
 // --- Partner requests: file ---------------------------------------------------
 
 export type SubmitRequestResult = {
   requestId: string;
   status: RequestStatus;
-  spotsGranted: number | null;
   teamSlug: string;
 };
 
@@ -476,30 +317,15 @@ export async function submitRequestAction(
     const parsed = requestFormSchema.safeParse({
       requesterTeamId: formData.get("requesterTeamId"),
       spotsRequested: formData.get("spotsRequested"),
-      pitch: formData.get("pitch"),
-      audienceSummary: formData.get("audienceSummary") || "",
       communityName: formData.get("communityName") ?? "",
+      communitySize: formData.get("communitySize"),
       communityX: formData.get("communityX") ?? "",
       communityDiscord: formData.get("communityDiscord") ?? "",
       communityTelegram: formData.get("communityTelegram") ?? "",
-      communityTiktok: formData.get("communityTiktok") ?? "",
-      communityInstagram: formData.get("communityInstagram") ?? "",
-      reportedRaffleEntries: formData.get("reportedRaffleEntries"),
+      raffleProofImageUrl: formData.get("raffleProofImageUrl") || "",
       contactName: formData.get("contactName") ?? "",
-      contactEmail: formData.get("contactEmail") ?? "",
-      contactX: formData.get("contactX") ?? "",
-      contactDiscord: formData.get("contactDiscord") ?? "",
-      contactTelegram: formData.get("contactTelegram") ?? "",
-      communitySize: formData.get("communitySize"),
-      holderCount: formData.get("holderCount"),
-      twitterFollowers: formData.get("twitterFollowers"),
-      discordMembers: formData.get("discordMembers"),
-      requesterChains: formData.getAll("requesterChains").map(String),
-      requesterAssetType: formData.get("requesterAssetType") || null,
-      evidenceLinks: formData.getAll("evidenceLinks").map(String).filter((s) => s.trim()),
-      attestations: formData.getAll("attestations").map(String),
-      walletForDelivery: formData.get("walletForDelivery") || "",
-      deliveryChain: formData.get("deliveryChain") || "",
+      contactMethod: formData.get("contactMethod"),
+      contactHandle: formData.get("contactHandle") ?? "",
     });
     if (!parsed.success) return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
     const data = parsed.data;
@@ -508,31 +334,9 @@ export async function submitRequestAction(
 
     const listing = await db.whitelistListing.findUnique({
       where: { id: listingId },
-      include: { criteria: true, team: { select: { id: true, slug: true, name: true } } },
+      include: { team: { select: { id: true, slug: true, name: true } } },
     });
     if (!listing || listing.status === "DRAFT") return fail("Listing not found.");
-
-    // Only rules the listing actually defines can be attested.
-    const criteria = criteriaFromRow(listing.criteria);
-    const ruleIds = new Set(criteria?.customRules.map((r) => r.id) ?? []);
-    const attestations: Record<string, boolean> = {};
-    for (const id of data.attestations) if (ruleIds.has(id)) attestations[id] = true;
-
-    const facts = (await getTeamPlatformFacts([data.requesterTeamId])).get(data.requesterTeamId) ?? {
-      raffleEntries: 0,
-      verifiedTeam: false,
-    };
-    const eligibility = evaluateEligibility(criteria, {
-      communitySize: data.communitySize,
-      holderCount: data.holderCount,
-      twitterFollowers: data.twitterFollowers,
-      discordMembers: data.discordMembers,
-      raffleEntries: facts.raffleEntries,
-      chains: data.requesterChains,
-      assetType: data.requesterAssetType,
-      verifiedTeam: facts.verifiedTeam,
-      attestations,
-    });
 
     let outcome;
     try {
@@ -540,33 +344,17 @@ export async function submitRequestAction(
         listingId,
         requesterTeamId: data.requesterTeamId,
         submittedById: userId,
+        addedByAdminId: null,
         spotsRequested: data.spotsRequested,
-        pitch: data.pitch,
-        audienceSummary: data.audienceSummary || null,
+        communityName: data.communityName,
         communitySize: data.communitySize,
-        holderCount: data.holderCount,
-        twitterFollowers: data.twitterFollowers,
-        discordMembers: data.discordMembers,
-        community: {
-          communityName: data.communityName,
-          communityX: data.communityX,
-          communityDiscord: data.communityDiscord,
-          communityTelegram: data.communityTelegram,
-          communityTiktok: data.communityTiktok,
-          communityInstagram: data.communityInstagram,
-          reportedRaffleEntries: data.reportedRaffleEntries,
-          contactName: data.contactName,
-          contactEmail: data.contactEmail,
-          contactX: data.contactX,
-          contactDiscord: data.contactDiscord,
-          contactTelegram: data.contactTelegram,
-        },
-        requesterChains: data.requesterChains,
-        requesterAssetType: data.requesterAssetType,
-        evidence: { links: data.evidenceLinks, attestations },
-        walletForDelivery: data.walletForDelivery || null,
-        deliveryChain: data.deliveryChain || null,
-        eligibility,
+        communityX: data.communityX,
+        communityDiscord: data.communityDiscord || null,
+        communityTelegram: data.communityTelegram || null,
+        raffleProofImageUrl: data.raffleProofImageUrl || null,
+        contactName: data.contactName,
+        contactMethod: data.contactMethod,
+        contactHandle: data.contactHandle,
       });
     } catch (err) {
       if (err instanceof RequestRuleError || err instanceof InventoryError) return fail(err.message);
@@ -575,59 +363,96 @@ export async function submitRequestAction(
 
     const requester = await db.team.findUniqueOrThrow({
       where: { id: data.requesterTeamId },
-      select: { slug: true, name: true, discordWebhookUrl: true },
+      select: { slug: true, name: true },
     });
     const meta = {
       listing: listing.title,
       requester: requester.name,
       spotsRequested: data.spotsRequested,
       status: outcome.request.status,
-      eligible: eligibility.eligible,
-      score: eligibility.score,
     };
     await Promise.all([
       recordAudit({ teamId: data.requesterTeamId, actorId: userId, action: "request.submit", target: outcome.request.id, meta }),
-      recordAudit({
-        teamId: listing.teamId,
-        actorId: userId,
-        action: outcome.autoApproved ? "request.auto_approve" : "request.submit",
-        target: outcome.request.id,
-        meta: { ...meta, allocationId: outcome.allocationId },
-      }),
+      recordAudit({ teamId: listing.teamId, actorId: userId, action: "request.submit", target: outcome.request.id, meta }),
     ]);
-
-    if (outcome.autoApproved) {
-      const submitter = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
-      await notifyRequestDecision({
-        decision: "approved",
-        to: submitter?.email ?? null,
-        requesterTeam: requester,
-        listingTeam: listing.team,
-        listing,
-        spotsGranted: outcome.request.spotsGranted,
-      });
-    }
 
     revalidateListing(listing.team.slug, listing);
     revalidatePath(`/dashboard/${requester.slug}/collab`, "layout");
 
-    const messages: Partial<Record<RequestStatus, string>> = {
-      APPROVED: `Approved instantly — ${outcome.request.spotsGranted} spots are yours. Submit delivery wallets from your desk.`,
-      WAITLISTED: "No partner spots left right now — you're on the waitlist.",
-      UNDER_REVIEW: "Request filed. You meet the criteria — it's in their review queue.",
-      SUBMITTED: eligibility.eligible
-        ? "Request filed."
-        : "Request filed, but it's flagged as below this listing's criteria.",
-    };
     return ok(
-      {
-        requestId: outcome.request.id,
-        status: outcome.request.status,
-        spotsGranted: outcome.request.spotsGranted,
-        teamSlug: requester.slug,
-      },
-      messages[outcome.request.status] ?? "Request filed."
+      { requestId: outcome.request.id, status: outcome.request.status, teamSlug: requester.slug },
+      "Request filed."
     );
+  });
+}
+
+/** A platform admin files a request on behalf of a project with no oxbot account. */
+export async function adminAddRequestAction(
+  listingId: string,
+  _prev: unknown,
+  formData: FormData
+): Promise<ActionState<{ requestId: string }>> {
+  const userId = await requireUserId();
+
+  return runAction<{ requestId: string }>(async () => {
+    checkMutateLimit(userId);
+    await requirePlatformAdmin(userId);
+
+    const parsed = adminRequestFormSchema.safeParse({
+      spotsRequested: formData.get("spotsRequested"),
+      communityName: formData.get("communityName") ?? "",
+      communitySize: formData.get("communitySize"),
+      communityX: formData.get("communityX") ?? "",
+      communityDiscord: formData.get("communityDiscord") ?? "",
+      communityTelegram: formData.get("communityTelegram") ?? "",
+      raffleProofImageUrl: formData.get("raffleProofImageUrl") || "",
+      contactName: formData.get("contactName") ?? "",
+      contactMethod: formData.get("contactMethod"),
+      contactHandle: formData.get("contactHandle") ?? "",
+    });
+    if (!parsed.success) return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
+    const data = parsed.data;
+
+    const listing = await db.whitelistListing.findUnique({
+      where: { id: listingId },
+      include: { team: { select: { id: true, slug: true, name: true } } },
+    });
+    if (!listing || listing.status === "DRAFT") return fail("Listing not found.");
+
+    let outcome;
+    try {
+      outcome = await fileRequest(db, {
+        listingId,
+        requesterTeamId: null,
+        submittedById: null,
+        addedByAdminId: userId,
+        spotsRequested: data.spotsRequested,
+        communityName: data.communityName,
+        communitySize: data.communitySize,
+        communityX: data.communityX,
+        communityDiscord: data.communityDiscord || null,
+        communityTelegram: data.communityTelegram || null,
+        raffleProofImageUrl: data.raffleProofImageUrl || null,
+        contactName: data.contactName,
+        contactMethod: data.contactMethod,
+        contactHandle: data.contactHandle,
+      });
+    } catch (err) {
+      if (err instanceof RequestRuleError || err instanceof InventoryError) return fail(err.message);
+      throw err;
+    }
+
+    await recordAudit({
+      teamId: listing.teamId,
+      actorId: userId,
+      action: "request.admin_add",
+      target: outcome.request.id,
+      meta: { listing: listing.title, community: data.communityName, spotsRequested: data.spotsRequested },
+    });
+
+    revalidateListing(listing.team.slug, listing);
+    revalidatePath("/admin/collab");
+    return ok({ requestId: outcome.request.id }, "Request added.");
   });
 }
 
@@ -672,6 +497,8 @@ export async function reviewRequestAction(
     }
 
     const { listing } = request;
+    const requesterName = request.requesterTeam?.name ?? request.communityName;
+
     if (decision.decision === "approve") {
       try {
         const result = await approveRequest(db, {
@@ -686,7 +513,7 @@ export async function reviewRequestAction(
           action: "request.approve",
           target: requestId,
           meta: {
-            requester: request.requesterTeam.name,
+            requester: requesterName,
             spotsRequested: request.spotsRequested,
             spotsGranted: decision.spotsGranted,
             partial: result.request.status === "PARTIALLY_APPROVED",
@@ -712,29 +539,33 @@ export async function reviewRequestAction(
         actorId: userId,
         action: decision.decision === "reject" ? "request.reject" : decision.decision === "needs_info" ? "request.needs_info" : "request.waitlist",
         target: requestId,
-        meta: { requester: request.requesterTeam.name, note },
+        meta: { requester: requesterName, note },
       });
     }
 
-    await notifyRequestDecision({
-      decision:
-        decision.decision === "approve"
-          ? "approved"
-          : decision.decision === "reject"
-            ? "rejected"
-            : decision.decision === "needs_info"
-              ? "needs_info"
-              : "waitlisted",
-      to: request.submittedBy?.email ?? null,
-      requesterTeam: request.requesterTeam,
-      listingTeam: listing.team,
-      listing,
-      spotsGranted: decision.decision === "approve" ? decision.spotsGranted : null,
-      note,
-    });
+    // A teamless (admin-added) request has no dashboard to notify — the admin
+    // coordinates with the project directly via their given contact handle.
+    if (request.requesterTeam) {
+      await notifyRequestDecision({
+        decision:
+          decision.decision === "approve"
+            ? "approved"
+            : decision.decision === "reject"
+              ? "rejected"
+              : decision.decision === "needs_info"
+                ? "needs_info"
+                : "waitlisted",
+        to: request.submittedBy?.email ?? null,
+        requesterTeam: request.requesterTeam,
+        listingTeam: listing.team,
+        listing,
+        spotsGranted: decision.decision === "approve" ? decision.spotsGranted : null,
+        note,
+      });
+      revalidatePath(`/dashboard/${request.requesterTeam.slug}/collab`, "layout");
+    }
 
     revalidateListing(listing.team.slug, listing);
-    revalidatePath(`/dashboard/${request.requesterTeam.slug}/collab`, "layout");
 
     const messages = {
       approve: "Approved — spots reserved for the partner.",
@@ -743,73 +574,6 @@ export async function reviewRequestAction(
       waitlist: "Request waitlisted.",
     } as const;
     return ok(undefined, messages[decision.decision]);
-  });
-}
-
-/** RAFFLE listings: draw qualified requester teams with a stored CSPRNG seed. */
-export async function drawPartnerRaffleAction(listingId: string): Promise<ActionState<{ winners: number }>> {
-  const userId = await requireUserId();
-
-  return runAction<{ winners: number }>(async () => {
-    checkMutateLimit(userId);
-    const listing = await db.whitelistListing.findUnique({
-      where: { id: listingId },
-      include: { team: { select: { id: true, slug: true, name: true } } },
-    });
-    if (!listing) return fail("Listing not found.");
-    await requireTeamRole(userId, listing.teamId, "COLLAB_MANAGER");
-
-    const seed = generateDrawSeed();
-    let result;
-    try {
-      result = await drawPartnerRaffle(db, { listingId, seed, reviewerId: userId });
-    } catch (err) {
-      if (err instanceof RequestRuleError || err instanceof InventoryError) return fail(err.message);
-      throw err;
-    }
-
-    await recordAudit({
-      teamId: listing.teamId,
-      actorId: userId,
-      action: "partner_raffle.draw",
-      target: listingId,
-      meta: {
-        seed,
-        winners: result.winners.length,
-        spots: result.winners.reduce((n, w) => n + w.spots, 0),
-        waitlisted: result.waitlisted,
-        expired: result.expired,
-      },
-    });
-
-    if (result.winners.length) {
-      const requests = await db.collabRequest.findMany({
-        where: { id: { in: result.winners.map((w) => w.requestId) } },
-        include: {
-          requesterTeam: { select: { slug: true, name: true, discordWebhookUrl: true } },
-          submittedBy: { select: { email: true } },
-        },
-      });
-      await Promise.all(
-        requests.map((r) =>
-          notifyRequestDecision({
-            decision: "raffle_won",
-            to: r.submittedBy?.email ?? null,
-            requesterTeam: r.requesterTeam,
-            listingTeam: listing.team,
-            listing,
-            spotsGranted: r.spotsGranted,
-          })
-        )
-      );
-    }
-
-    revalidateListing(listing.team.slug, listing);
-    const n = result.winners.length;
-    return ok(
-      { winners: n },
-      n === 0 ? "Drawn — no qualified requests could be allocated." : `Drew ${n} partner${n === 1 ? "" : "s"}. The listing is now closed.`
-    );
   });
 }
 
@@ -824,9 +588,11 @@ async function loadRequestForRequesterTeam(requestId: string, userId: string) {
       allocation: true,
     },
   });
-  if (!request) throw new AuthzError("Request not found.", "NOT_FOUND");
+  if (!request || !request.requesterTeamId || !request.requesterTeam) {
+    throw new AuthzError("Request not found.", "NOT_FOUND");
+  }
   await requireTeamRole(userId, request.requesterTeamId, "COLLAB_MANAGER");
-  return request;
+  return { ...request, requesterTeamId: request.requesterTeamId, requesterTeam: request.requesterTeam };
 }
 
 export async function replyToRequestAction(
@@ -843,10 +609,7 @@ export async function replyToRequestAction(
 
     const claimed = await db.collabRequest.updateMany({
       where: { id: requestId, status: "NEEDS_INFO" },
-      data: {
-        requesterReply: parsed.data.reply,
-        status: request.eligible && request.listing.distributionMethod === "CRITERIA" ? "UNDER_REVIEW" : "SUBMITTED",
-      },
+      data: { requesterReply: parsed.data.reply, status: "SUBMITTED" },
     });
     if (claimed.count === 0) return fail("This request isn't waiting on a reply.");
 
@@ -928,7 +691,9 @@ export async function submitAllocationWalletsAction(
       },
     });
     if (!allocation) return fail("Allocation not found.");
-    await requireTeamRole(userId, allocation.teamId, "COLLAB_MANAGER");
+    // A teamless (admin-added) allocation has no receiving team to log in — the
+    // listing team submits the wallets themselves, coordinated out-of-band.
+    await requireTeamRole(userId, allocation.teamId ?? allocation.listing.teamId, "COLLAB_MANAGER");
     if (allocation.status === "REVOKED" || allocation.status === "DELIVERED") {
       return fail(`This allocation is already ${allocation.status.toLowerCase()}.`);
     }
@@ -960,11 +725,17 @@ export async function submitAllocationWalletsAction(
       throw err;
     }
 
-    await Promise.all([
-      recordAudit({ teamId: allocation.teamId, actorId: userId, action: "allocation.wallets", target: allocationId, meta: { wallets: wallets.length } }),
-      recordAudit({ teamId: allocation.listing.teamId, actorId: userId, action: "allocation.wallets", target: allocationId, meta: { partner: allocation.team.name, wallets: wallets.length } }),
-    ]);
-    revalidatePath(`/dashboard/${allocation.team.slug}/collab`, "layout");
+    await recordAudit({
+      teamId: allocation.listing.teamId,
+      actorId: userId,
+      action: "allocation.wallets",
+      target: allocationId,
+      meta: { partner: allocation.team?.name ?? null, wallets: wallets.length },
+    });
+    if (allocation.teamId) {
+      await recordAudit({ teamId: allocation.teamId, actorId: userId, action: "allocation.wallets", target: allocationId, meta: { wallets: wallets.length } });
+      revalidatePath(`/dashboard/${allocation.team?.slug}/collab`, "layout");
+    }
     revalidatePath(`/dashboard/${allocation.listing.team.slug}/collab`, "layout");
     return ok(undefined, `${wallets.length} wallet${wallets.length === 1 ? "" : "s"} submitted — spots confirmed.`);
   });
@@ -1001,152 +772,19 @@ export async function setAllocationStatusAction(
     }
 
     const action = target === "CONFIRMED" ? "allocation.confirm" : target === "DELIVERED" ? "allocation.deliver" : "allocation.revoke";
-    await Promise.all([
-      recordAudit({ teamId: allocation.listing.teamId, actorId: userId, action, target: allocationId, meta: { partner: allocation.team.name, spots: allocation.spots } }),
-      recordAudit({ teamId: allocation.teamId, actorId: userId, action, target: allocationId, meta: { spots: allocation.spots } }),
-    ]);
+    await recordAudit({
+      teamId: allocation.listing.teamId,
+      actorId: userId,
+      action,
+      target: allocationId,
+      meta: { partner: allocation.team?.name ?? null, spots: allocation.spots },
+    });
+    if (allocation.teamId) {
+      await recordAudit({ teamId: allocation.teamId, actorId: userId, action, target: allocationId, meta: { spots: allocation.spots } });
+    }
     revalidateListing(allocation.listing.team.slug, allocation.listing);
-    revalidatePath(`/dashboard/${allocation.team.slug}/collab`, "layout");
+    if (allocation.team) revalidatePath(`/dashboard/${allocation.team.slug}/collab`, "layout");
     const messages = { CONFIRMED: "Allocation confirmed.", DELIVERED: "Marked as delivered.", REVOKED: "Allocation revoked — spots returned to inventory." };
     return ok(undefined, messages[target]);
   });
-}
-
-// --- Public whitelist raffle (a normal giveaway linked to the listing) --------
-
-const publicRaffleSchema = z
-  .object({
-    type: z.enum(["RANDOM", "FCFS"]),
-    startAt: z.coerce.date({ message: "Pick a start time." }),
-    endAt: z.coerce.date({ message: "Pick an end time." }),
-    requirements: z.array(requirementSchema).max(12).default([]),
-  })
-  .refine((d) => d.type === "FCFS" || d.endAt.getTime() > d.startAt.getTime(), {
-    message: "The raffle must end after it starts.",
-    path: ["endAt"],
-  });
-
-/**
- * Open the public raffle for a listing's `publicSpots`: creates a Giveaway
- * linked by `listingId` (winners = public spots, prize "GTD whitelist x N")
- * that runs on the existing entry engine, seeded draw and winners export.
- * Publishing goes through the standard giveaway publish action so the Discord
- * announcement and audit trail are identical to any other giveaway.
- */
-export async function openPublicRaffleAction(
-  listingId: string,
-  _prev: unknown,
-  formData: FormData
-): Promise<ActionState<{ giveawayId: string; teamSlug: string }>> {
-  const userId = await requireUserId();
-  const publish = formData.get("publish") === "true";
-
-  const result = await runAction<{ giveawayId: string; teamSlug: string }>(async () => {
-    checkMutateLimit(userId);
-    const listing = await db.whitelistListing.findUnique({
-      where: { id: listingId },
-      include: {
-        team: { select: { id: true, slug: true, name: true, xHandle: true, discordGuildId: true, bannerUrl: true } },
-        publicRaffle: { select: { id: true } },
-      },
-    });
-    if (!listing) return fail("Listing not found.");
-    await requireTeamRole(userId, listing.teamId, "COLLAB_MANAGER");
-
-    if (listing.status === "CANCELLED") return fail("This listing was cancelled.");
-    if (listing.publicRaffle) return fail("This listing already has a public raffle.");
-    if (listing.publicSpots < 1) {
-      return fail("Set aside public spots on the listing first (Edit → Spots → Public raffle slice).");
-    }
-
-    const parsed = publicRaffleSchema.safeParse({
-      type: formData.get("type"),
-      startAt: formData.get("startAt"),
-      endAt: formData.get("endAt"),
-      requirements: parseJsonField(formData, "requirements") ?? [],
-    });
-    if (!parsed.success) return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
-    const data = parsed.data;
-    const endAt = data.type === "FCFS" ? FCFS_SENTINEL_END_AT : data.endAt;
-    if (publish && endAt.getTime() <= Date.now()) {
-      return fail("The raffle must end in the future to publish.", { endAt: ["Pick a future end time."] });
-    }
-
-    const usesDiscord = data.requirements.some((r) => r.type === "DISCORD_MEMBER" || r.type === "DISCORD_ROLE");
-    if (usesDiscord && !listing.team.discordGuildId) {
-      return fail("Link your Discord server in project settings to use a Discord task.");
-    }
-
-    const spots = listing.publicSpots;
-    const slug = await uniqueGiveawaySlug(`${listing.team.name} public wl`);
-    const giveaway = await db.giveaway.create({
-      data: {
-        teamId: listing.teamId,
-        listingId: listing.id,
-        slug,
-        title: `${listing.team.name} Public WL`,
-        description: [
-          `${spots} guaranteed whitelist spot${spots === 1 ? "" : "s"} for ${listing.collectionName ?? listing.tokenSymbol ?? listing.title}, open to everyone.`,
-          listing.description,
-        ]
-          .filter(Boolean)
-          .join("\n\n"),
-        prize: `GTD whitelist x ${spots}`,
-        bannerUrl: listing.bannerUrl ?? listing.team.bannerUrl,
-        type: data.type,
-        status: "DRAFT",
-        visibility: "PUBLIC",
-        chain: listing.chain,
-        winnersCount: spots,
-        startAt: data.startAt,
-        endAt,
-        xAccount: listing.team.xHandle,
-        discordServerId: listing.team.discordGuildId,
-        createdById: userId,
-        requirements: {
-          create: data.requirements.map((r, i) => {
-            const { type, required, ...rest } = r;
-            const config: Record<string, unknown> = { ...rest };
-            if (type === "TWITTER_FOLLOW" && typeof config.handle === "string") {
-              config.handle = config.handle.replace(/^@/, "");
-            }
-            return { type, required: required ?? true, order: i, config: config as Prisma.InputJsonValue };
-          }),
-        },
-      },
-    });
-
-    await Promise.all([
-      recordAudit({
-        teamId: listing.teamId,
-        actorId: userId,
-        action: "listing.raffle_open",
-        target: listing.id,
-        meta: { giveawayId: giveaway.id, spots, type: data.type, tasks: data.requirements.map((r) => r.type) },
-      }),
-      recordAudit({
-        teamId: listing.teamId,
-        actorId: userId,
-        action: "giveaway.create",
-        target: giveaway.id,
-        meta: { title: giveaway.title, type: giveaway.type, listingId: listing.id, published: publish },
-      }),
-    ]);
-
-    if (publish) {
-      const published = await publishGiveawayAction(giveaway.id);
-      if (!published.ok) {
-        return fail(`Raffle created as a draft, but publishing failed: ${published.error ?? "unknown error"}`);
-      }
-    }
-
-    revalidateListing(listing.team.slug, listing);
-    revalidatePath(`/dashboard/${listing.team.slug}/giveaways`);
-    return ok({ giveawayId: giveaway.id, teamSlug: listing.team.slug });
-  });
-
-  if (result.ok && result.data) {
-    redirect(`/dashboard/${result.data.teamSlug}/giveaways/${result.data.giveawayId}`);
-  }
-  return result;
 }

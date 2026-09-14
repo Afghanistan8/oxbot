@@ -30,8 +30,6 @@ export type GiveawayCardData = {
   hideEntryCount: boolean;
   /** Only present when the giveaway does not hide its count. */
   entryCount: number | null;
-  /** Set when this is an OxFoxes Collab public whitelist raffle. */
-  listingId: string | null;
   team: {
     name: string;
     slug: string;

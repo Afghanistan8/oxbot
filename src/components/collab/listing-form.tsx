@@ -3,15 +3,14 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
-import { Loader2, Lock, Rocket, Save, Zap, ListChecks, Dices, Hand } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import type { AssetType, Blockchain, DistributionMethod, GiveawayVisibility } from "@prisma/client";
+import { Loader2, Rocket, Save } from "lucide-react";
+import type { AssetType, Blockchain, GiveawayVisibility } from "@prisma/client";
 
 import { createListingAction, updateListingAction } from "@/server/actions/collab";
 import type { ActionState } from "@/server/actions/_result";
-import type { ManagedListing, CriteriaTemplate } from "@/server/queries/collab";
+import type { ManagedListing } from "@/server/queries/collab";
 import { ALL_CHAINS, CHAIN_META, GIVEAWAY_VISIBILITY_META } from "@/lib/constants";
-import { ASSET_TYPES, ASSET_TYPE_META, DISTRIBUTION_METHODS, METHOD_META } from "@/lib/collab/constants";
+import { ASSET_TYPES, ASSET_TYPE_META } from "@/lib/collab/constants";
 import { cn, formatNumber } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,19 +22,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FormMessage, FieldError } from "@/components/dashboard/form-message";
 import { ImageUploadField } from "@/components/dashboard/image-upload-field";
 import { ChainBadge } from "@/components/giveaway/chain-badge";
-import {
-  CriteriaEditor,
-  draftFromCriteria,
-  serializeCriteria,
-  type CriteriaDraft,
-} from "@/components/collab/criteria-editor";
 
 /**
  * ListingForm — create / edit a Collab whitelist listing. Mirrors GiveawayForm:
  * card sections, controlled Radix-free inputs carried in hidden fields, and
  * schedule values posted as absolute UTC instants.
  *
- * Sections: identity → spots → distribution → criteria → window → visibility.
+ * Sections: identity → spots → window → visibility.
  */
 
 export type ListingTeamProfile = {
@@ -49,13 +42,6 @@ export type ListingTeamProfile = {
   mintAt: Date | null;
   xHandle: string | null;
   discordInvite: string | null;
-};
-
-const METHOD_ICONS: Record<DistributionMethod, LucideIcon> = {
-  FCFS: Zap,
-  CRITERIA: ListChecks,
-  RAFFLE: Dices,
-  MANUAL: Hand,
 };
 
 function toLocalInputValue(d: Date): string {
@@ -78,13 +64,11 @@ export function ListingForm({
   teamId,
   team,
   listing,
-  templates,
 }: {
   mode: "create" | "edit";
   teamId: string;
   team: ListingTeamProfile;
   listing?: ManagedListing;
-  templates: CriteriaTemplate[];
 }) {
   const [state, formAction] = useActionState<FormResult, FormData>(async (prev, formData) => {
     if (mode === "create") return createListingAction(teamId, prev, formData);
@@ -94,13 +78,10 @@ export function ListingForm({
 
   const [assetType, setAssetType] = useState<AssetType>(listing?.assetType ?? "NFT");
   const [chain, setChain] = useState<Blockchain>(listing?.chain ?? team.primaryChain ?? team.chains[0] ?? "ETHEREUM");
-  const [method, setMethod] = useState<DistributionMethod>(listing?.distributionMethod ?? "CRITERIA");
   const [visibility, setVisibility] = useState<GiveawayVisibility>(listing?.visibility ?? "PUBLIC");
   const [hideRequestCount, setHideRequestCount] = useState(listing?.hideRequestCount ?? false);
-  const [criteria, setCriteria] = useState<CriteriaDraft>(draftFromCriteria(listing?.criteria));
 
   const [totalSpots, setTotalSpots] = useState(String(listing?.totalSpots ?? 100));
-  const [publicSpots, setPublicSpots] = useState(String(listing?.publicSpots ?? 0));
   const [minPer, setMinPer] = useState(String(listing?.spotsPerRequestMin ?? 1));
   const [maxPer, setMaxPer] = useState(String(listing?.spotsPerRequestMax ?? 25));
 
@@ -118,23 +99,19 @@ export function ListingForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const methodLocked = mode === "edit" && (listing?.requestCount ?? 0) > 0;
   const committed = (listing?.reservedSpots ?? 0) + (listing?.allocatedSpots ?? 0);
-  const partnerInventory = useMemo(() => {
+  const available = useMemo(() => {
     const t = Number(totalSpots) || 0;
-    const p = Number(publicSpots) || 0;
-    return Math.max(0, t - p - committed);
-  }, [totalSpots, publicSpots, committed]);
+    return Math.max(0, t - committed);
+  }, [totalSpots, committed]);
   const isToken = assetType === "TOKEN";
 
   return (
     <form action={formAction} className="space-y-6">
       <input type="hidden" name="assetType" value={assetType} />
       <input type="hidden" name="chain" value={chain} />
-      <input type="hidden" name="distributionMethod" value={method} />
       <input type="hidden" name="visibility" value={visibility} />
       <input type="hidden" name="hideRequestCount" value={hideRequestCount ? "true" : "false"} />
-      <input type="hidden" name="criteria" value={serializeCriteria(criteria)} />
       <input type="hidden" name="startAt" value={localInputToIso(startAt)} />
       <input type="hidden" name="endAt" value={localInputToIso(endAt)} />
       <input type="hidden" name="mintOrTgeAt" value={localInputToIso(mintOrTgeAt)} />
@@ -282,87 +259,22 @@ export function ListingForm({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Spots</CardTitle>
-          <CardDescription>
-            Total inventory, how much each partner may ask for, and an optional slice for a public raffle.
-          </CardDescription>
+          <CardDescription>Total inventory, and how much each partner may ask for.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-5 sm:grid-cols-3">
             <NumberField id="totalSpots" label="Total spots" value={totalSpots} onChange={setTotalSpots} min={1} error={state.fieldErrors?.totalSpots} />
-            <NumberField id="publicSpots" label="Public raffle slice" value={publicSpots} onChange={setPublicSpots} min={0} error={state.fieldErrors?.publicSpots} />
             <NumberField id="spotsPerRequestMin" label="Min per partner" value={minPer} onChange={setMinPer} min={1} error={state.fieldErrors?.spotsPerRequestMin} />
             <NumberField id="spotsPerRequestMax" label="Max per partner" value={maxPer} onChange={setMaxPer} min={1} error={state.fieldErrors?.spotsPerRequestMax} />
           </div>
           <p className="rounded-xl border border-border bg-ink-black/40 px-4 py-3 text-xs text-muted-foreground">
-            <span className="font-medium text-scarlet-soft">{formatNumber(partnerInventory)}</span> spots open to partners
+            <span className="font-medium text-scarlet-soft">{formatNumber(available)}</span> spots open to partners
             {committed > 0 && <> · {formatNumber(committed)} already granted</>}
-            {Number(publicSpots) > 0 && <> · {formatNumber(Number(publicSpots))} held for a public raffle (open it from the listing page once published)</>}
           </p>
         </CardContent>
       </Card>
 
-      {/* --- 3. Distribution --- */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Distribution</CardTitle>
-          <CardDescription>
-            {methodLocked ? "Locked — requests have already been filed under this method." : "How partner spots are handed out."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {DISTRIBUTION_METHODS.map((m) => {
-              const Icon = METHOD_ICONS[m];
-              const active = method === m;
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  disabled={methodLocked}
-                  onClick={() => setMethod(m)}
-                  className={cn(
-                    "rounded-2xl border p-4 text-left transition-all",
-                    active ? "border-primary/60 bg-primary/10 shadow-glow-red" : "border-border bg-card/40 hover:border-primary/40",
-                    methodLocked && !active && "opacity-40",
-                    methodLocked && "cursor-default"
-                  )}
-                >
-                  <div className="mb-2 flex items-center gap-2">
-                    <div className={cn("grid h-8 w-8 place-items-center rounded-lg", active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    {methodLocked && active && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
-                  </div>
-                  <p className="text-sm font-semibold text-white">{METHOD_META[m].label}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{METHOD_META[m].blurb}</p>
-                </button>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* --- 4. Criteria --- */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Criteria</CardTitle>
-          <CardDescription>
-            {method === "MANUAL"
-              ? "Optional — every request comes to you, criteria just score them."
-              : method === "FCFS"
-                ? "Requests that meet these are approved instantly while spots last."
-                : method === "RAFFLE"
-                  ? "Only requesters that meet these enter the partner raffle."
-                  : "Qualified requests go to your review queue; the rest are flagged."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <CriteriaEditor value={criteria} onChange={setCriteria} templates={templates} />
-          <FieldError errors={Object.entries(state.fieldErrors ?? {}).find(([k]) => k.startsWith("criteria"))?.[1]} />
-        </CardContent>
-      </Card>
-
-      {/* --- 5. Window --- */}
+      {/* --- 3. Window --- */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Request window</CardTitle>
@@ -382,7 +294,7 @@ export function ListingForm({
         </CardContent>
       </Card>
 
-      {/* --- 6. Visibility & privacy --- */}
+      {/* --- 4. Visibility & privacy --- */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Visibility &amp; privacy</CardTitle>

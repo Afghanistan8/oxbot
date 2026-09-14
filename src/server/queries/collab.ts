@@ -1,20 +1,12 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import {
-  criteriaFromRow,
-  isVerifiedTeam,
-  parseEvidence,
-  type CriteriaInput,
-  type EligibilityCheck,
-} from "@/lib/collab/eligibility";
 import { OPEN_REQUEST_STATUSES, availableSpots } from "@/lib/collab/constants";
 import type {
   AllocationStatus,
   AssetType,
   Blockchain,
-  DistributionMethod,
-  GiveawayStatus,
+  ContactMethod,
   GiveawayVisibility,
   ListingStatus,
   RequestStatus,
@@ -22,8 +14,8 @@ import type {
 
 /**
  * Team-scoped OxFoxes Collab queries for the dashboard. PRIVATE: these expose
- * requester pitches, stats, wallets and private notes — callers MUST verify
- * membership first (resolveTeamPage / requireTeamRole / requireTeamBySlug).
+ * requester contact details, stats, wallets and private notes — callers MUST
+ * verify membership first (resolveTeamPage / requireTeamRole / requireTeamBySlug).
  */
 
 export type DashboardListing = {
@@ -35,7 +27,6 @@ export type DashboardListing = {
   chain: Blockchain;
   collectionName: string | null;
   tokenSymbol: string | null;
-  distributionMethod: DistributionMethod;
   status: ListingStatus;
   visibility: GiveawayVisibility;
   startAt: Date;
@@ -43,11 +34,9 @@ export type DashboardListing = {
   totalSpots: number;
   reservedSpots: number;
   allocatedSpots: number;
-  publicSpots: number;
   available: number;
   requestCount: number;
   openRequestCount: number;
-  publicRaffle: { id: string; slug: string; status: GiveawayStatus } | null;
   createdAt: Date;
 };
 
@@ -60,7 +49,6 @@ const listingSelect = {
   chain: true,
   collectionName: true,
   tokenSymbol: true,
-  distributionMethod: true,
   status: true,
   visibility: true,
   startAt: true,
@@ -68,9 +56,7 @@ const listingSelect = {
   totalSpots: true,
   reservedSpots: true,
   allocatedSpots: true,
-  publicSpots: true,
   createdAt: true,
-  publicRaffle: { select: { id: true, slug: true, status: true } },
   _count: { select: { requests: true } },
 } as const;
 
@@ -110,13 +96,8 @@ export type ManagedListing = DashboardListing & {
   spotsPerRequestMax: number;
   hideRequestCount: boolean;
   notesPrivate: string | null;
-  drawSeed: string | null;
-  drawnAt: Date | null;
-  criteria: CriteriaInput | null;
   requestStatusCounts: Partial<Record<RequestStatus, number>>;
   allocationCounts: Partial<Record<AllocationStatus, { count: number; spots: number }>>;
-  /** Open requests that meet the criteria (the partner-raffle pool). */
-  qualifiedOpenCount: number;
 };
 
 /** One listing scoped to its team (null if it belongs to someone else). */
@@ -134,20 +115,16 @@ export async function getManagedListing(teamId: string, listingId: string): Prom
       spotsPerRequestMax: true,
       hideRequestCount: true,
       notesPrivate: true,
-      drawSeed: true,
-      drawnAt: true,
-      criteria: true,
     },
   });
   if (!row) return null;
 
-  const [byStatus, allocations, qualifiedOpenCount] = await Promise.all([
+  const [byStatus, allocations] = await Promise.all([
     db.collabRequest.groupBy({ by: ["status"], where: { listingId }, _count: { _all: true } }),
     db.collabAllocation.groupBy({ by: ["status"], where: { listingId }, _count: { _all: true }, _sum: { spots: true } }),
-    db.collabRequest.count({ where: { listingId, status: { in: OPEN_REQUEST_STATUSES }, eligible: true } }),
   ]);
 
-  const { _count, criteria, ...rest } = row;
+  const { _count, ...rest } = row;
   const requestStatusCounts: ManagedListing["requestStatusCounts"] = {};
   for (const g of byStatus) requestStatusCounts[g.status] = g._count._all;
   const allocationCounts: ManagedListing["allocationCounts"] = {};
@@ -158,64 +135,38 @@ export async function getManagedListing(teamId: string, listingId: string): Prom
     available: availableSpots(rest),
     requestCount: _count.requests,
     openRequestCount: OPEN_REQUEST_STATUSES.reduce((n, s) => n + (requestStatusCounts[s] ?? 0), 0),
-    criteria: criteriaFromRow(criteria),
     requestStatusCounts,
     allocationCounts,
-    qualifiedOpenCount,
   };
-}
-
-export type CriteriaTemplate = { id: string; name: string; criteria: CriteriaInput; updatedAt: Date };
-
-/** A team's saved criteria templates, most recently edited first. */
-export async function getCriteriaTemplates(teamId: string): Promise<CriteriaTemplate[]> {
-  const rows = await db.listingCriteria.findMany({
-    where: { templateTeamId: teamId, listingId: null },
-    orderBy: { updatedAt: "desc" },
-  });
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name ?? "Untitled template",
-    criteria: criteriaFromRow(r)!,
-    updatedAt: r.updatedAt,
-  }));
 }
 
 export type CollabOverview = {
   listings: { open: number; total: number };
-  spots: { total: number; available: number; granted: number; public: number };
+  spots: { total: number; available: number; granted: number };
   incoming: { open: number; total: number };
   outgoing: { open: number; approvedSpots: number };
-  publicRaffles: { live: number; total: number };
 };
 
 /** Headline numbers for `/dashboard/[team]/collab`. */
 export async function getCollabOverview(teamId: string): Promise<CollabOverview> {
-  const now = new Date();
-  const [listings, incomingOpen, incomingTotal, outgoingOpen, outgoingGranted, rafflesLive, rafflesTotal] =
-    await Promise.all([
-      db.whitelistListing.findMany({
-        where: { teamId, status: { not: "CANCELLED" } },
-        select: {
-          status: true,
-          totalSpots: true,
-          reservedSpots: true,
-          allocatedSpots: true,
-          publicSpots: true,
-        },
-      }),
-      db.collabRequest.count({ where: { listing: { teamId }, status: { in: OPEN_REQUEST_STATUSES } } }),
-      db.collabRequest.count({ where: { listing: { teamId } } }),
-      db.collabRequest.count({ where: { requesterTeamId: teamId, status: { in: OPEN_REQUEST_STATUSES } } }),
-      db.collabAllocation.aggregate({
-        where: { teamId, status: { not: "REVOKED" } },
-        _sum: { spots: true },
-      }),
-      db.giveaway.count({
-        where: { teamId, listingId: { not: null }, status: "ACTIVE", startAt: { lte: now }, endAt: { gt: now } },
-      }),
-      db.giveaway.count({ where: { teamId, listingId: { not: null } } }),
-    ]);
+  const [listings, incomingOpen, incomingTotal, outgoingOpen, outgoingGranted] = await Promise.all([
+    db.whitelistListing.findMany({
+      where: { teamId, status: { not: "CANCELLED" } },
+      select: {
+        status: true,
+        totalSpots: true,
+        reservedSpots: true,
+        allocatedSpots: true,
+      },
+    }),
+    db.collabRequest.count({ where: { listing: { teamId }, status: { in: OPEN_REQUEST_STATUSES } } }),
+    db.collabRequest.count({ where: { listing: { teamId } } }),
+    db.collabRequest.count({ where: { requesterTeamId: teamId, status: { in: OPEN_REQUEST_STATUSES } } }),
+    db.collabAllocation.aggregate({
+      where: { teamId, status: { not: "REVOKED" } },
+      _sum: { spots: true },
+    }),
+  ]);
 
   return {
     listings: {
@@ -228,70 +179,10 @@ export async function getCollabOverview(teamId: string): Promise<CollabOverview>
         .filter((l) => l.status === "OPEN")
         .reduce((n, l) => n + availableSpots(l), 0),
       granted: listings.reduce((n, l) => n + l.reservedSpots + l.allocatedSpots, 0),
-      public: listings.reduce((n, l) => n + l.publicSpots, 0),
     },
     incoming: { open: incomingOpen, total: incomingTotal },
     outgoing: { open: outgoingOpen, approvedSpots: outgoingGranted._sum.spots ?? 0 },
-    publicRaffles: { live: rafflesLive, total: rafflesTotal },
   };
-}
-
-// ---------------------------------------------------------------------------
-// Platform-computed requester facts (eligibility inputs oxbot can vouch for)
-// ---------------------------------------------------------------------------
-
-export type TeamPlatformFacts = {
-  raffleEntries: number;
-  verifiedTeam: boolean;
-};
-
-/**
- * For each team: completed entries across its oxbot giveaways, and whether it
- * counts as a verified project (logo + a social + a published drop).
- */
-export async function getTeamPlatformFacts(teamIds: string[]): Promise<Map<string, TeamPlatformFacts>> {
-  const out = new Map<string, TeamPlatformFacts>();
-  if (teamIds.length === 0) return out;
-
-  const [teams, entries, giveaways, listings] = await Promise.all([
-    db.team.findMany({
-      where: { id: { in: teamIds } },
-      select: { id: true, logoUrl: true, xHandle: true, discordInvite: true },
-    }),
-    db.giveaway.findMany({
-      where: { teamId: { in: teamIds } },
-      select: { teamId: true, _count: { select: { entries: { where: { status: "COMPLETED" } } } } },
-    }),
-    db.giveaway.groupBy({
-      by: ["teamId"],
-      where: { teamId: { in: teamIds }, status: { notIn: ["DRAFT", "CANCELLED"] } },
-      _count: { _all: true },
-    }),
-    db.whitelistListing.groupBy({
-      by: ["teamId"],
-      where: { teamId: { in: teamIds }, status: { notIn: ["DRAFT", "CANCELLED"] } },
-      _count: { _all: true },
-    }),
-  ]);
-
-  const entriesByTeam = new Map<string, number>();
-  for (const g of entries) entriesByTeam.set(g.teamId, (entriesByTeam.get(g.teamId) ?? 0) + g._count.entries);
-  const giveawaysByTeam = new Map(giveaways.map((g) => [g.teamId, g._count._all]));
-  const listingsByTeam = new Map(listings.map((l) => [l.teamId, l._count._all]));
-
-  for (const t of teams) {
-    out.set(t.id, {
-      raffleEntries: entriesByTeam.get(t.id) ?? 0,
-      verifiedTeam: isVerifiedTeam({
-        logoUrl: t.logoUrl,
-        xHandle: t.xHandle,
-        discordInvite: t.discordInvite,
-        publishedGiveaways: giveawaysByTeam.get(t.id) ?? 0,
-        publishedListings: listingsByTeam.get(t.id) ?? 0,
-      }),
-    });
-  }
-  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,16 +203,12 @@ export type IncomingRequestRow = {
   status: RequestStatus;
   spotsRequested: number;
   spotsGranted: number | null;
-  eligible: boolean;
-  eligibilityScore: number;
-  communitySize: number | null;
-  twitterFollowers: number | null;
-  discordMembers: number | null;
-  pitch: string;
-  communityName: string | null;
+  communityName: string;
+  communitySize: number;
   createdAt: Date;
-  requesterTeam: { name: string; slug: string; logoUrl: string | null; xHandle: string | null };
-  listing: { id: string; title: string; distributionMethod: DistributionMethod };
+  requesterTeam: { name: string; slug: string; logoUrl: string | null } | null;
+  addedByAdmin: { name: string | null; email: string | null } | null;
+  listing: { id: string; title: string };
 };
 
 /** Requests against a team's listings, newest first (optionally one listing). */
@@ -342,30 +229,14 @@ export async function getIncomingRequests(
       status: true,
       spotsRequested: true,
       spotsGranted: true,
-      eligible: true,
-      eligibilityScore: true,
-      communitySize: true,
-      twitterFollowers: true,
-      discordMembers: true,
-      pitch: true,
       communityName: true,
+      communitySize: true,
       createdAt: true,
-      requesterTeam: { select: { name: true, slug: true, logoUrl: true, xHandle: true } },
-      listing: { select: { id: true, title: true, distributionMethod: true } },
+      requesterTeam: { select: { name: true, slug: true, logoUrl: true } },
+      addedByAdmin: { select: { name: true, email: true } },
+      listing: { select: { id: true, title: true } },
     },
   });
-}
-
-/** Defensive parse of a stored eligibility snapshot. */
-function parseChecks(raw: unknown): EligibilityCheck[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.filter(
-    (c): c is EligibilityCheck =>
-      Boolean(c) &&
-      typeof c === "object" &&
-      typeof (c as EligibilityCheck).label === "string" &&
-      typeof (c as EligibilityCheck).met === "boolean"
-  );
 }
 
 /** One incoming request with everything the review desk shows. */
@@ -387,6 +258,7 @@ export async function getIncomingRequest(teamId: string, requestId: string) {
         },
       },
       submittedBy: { select: { name: true, email: true } },
+      addedByAdmin: { select: { name: true, email: true } },
       reviewedBy: { select: { name: true, email: true } },
       allocation: true,
       listing: {
@@ -395,15 +267,12 @@ export async function getIncomingRequest(teamId: string, requestId: string) {
           slug: true,
           title: true,
           chain: true,
-          distributionMethod: true,
           status: true,
           totalSpots: true,
           reservedSpots: true,
           allocatedSpots: true,
-          publicSpots: true,
           spotsPerRequestMin: true,
           spotsPerRequestMax: true,
-          criteria: true,
         },
       },
     },
@@ -411,9 +280,7 @@ export async function getIncomingRequest(teamId: string, requestId: string) {
   if (!r) return null;
   return {
     ...r,
-    evidence: parseEvidence(r.evidence),
-    checks: parseChecks(r.eligibility),
-    listing: { ...r.listing, available: availableSpots(r.listing), criteria: criteriaFromRow(r.listing.criteria) },
+    listing: { ...r.listing, available: availableSpots(r.listing) },
     allocationWallets: parseWallets(r.allocation?.wallets),
   };
 }
@@ -444,8 +311,6 @@ export type OutgoingRequestRow = {
   status: RequestStatus;
   spotsRequested: number;
   spotsGranted: number | null;
-  eligible: boolean;
-  eligibilityScore: number;
   reviewerNote: string | null;
   requesterReply: string | null;
   createdAt: Date;
@@ -456,7 +321,6 @@ export type OutgoingRequestRow = {
     title: string;
     chain: Blockchain;
     assetType: AssetType;
-    distributionMethod: DistributionMethod;
     mintOrTgeAt: Date | null;
     status: ListingStatus;
     team: { name: string; slug: string; logoUrl: string | null; xHandle: string | null; discordInvite: string | null };
@@ -482,8 +346,6 @@ export async function getOutgoingRequests(teamId: string): Promise<OutgoingReque
       status: true,
       spotsRequested: true,
       spotsGranted: true,
-      eligible: true,
-      eligibilityScore: true,
       reviewerNote: true,
       requesterReply: true,
       createdAt: true,
@@ -495,7 +357,6 @@ export async function getOutgoingRequests(teamId: string): Promise<OutgoingReque
           title: true,
           chain: true,
           assetType: true,
-          distributionMethod: true,
           mintOrTgeAt: true,
           status: true,
           team: { select: { name: true, slug: true, logoUrl: true, xHandle: true, discordInvite: true } },
@@ -525,106 +386,17 @@ export type AllocationRow = {
   createdAt: Date;
   confirmedAt: Date | null;
   deliveredAt: Date | null;
-  team: { name: string; slug: string; xHandle: string | null; discordInvite: string | null };
+  team: { name: string; slug: string; xHandle: string | null; discordInvite: string | null } | null;
   listing: { id: string; title: string; chain: Blockchain };
   request: {
     id: string;
-    walletForDelivery: string | null;
     spotsRequested: number;
-    communityName: string | null;
-    contactName: string | null;
-    contactEmail: string | null;
-    contactX: string | null;
-    contactDiscord: string | null;
-    contactTelegram: string | null;
+    communityName: string;
+    contactName: string;
+    contactMethod: ContactMethod;
+    contactHandle: string;
   } | null;
 };
-
-export type TeamPublicRaffleRow = {
-  listing: {
-    id: string;
-    slug: string;
-    title: string;
-    assetType: AssetType;
-    chain: Blockchain;
-    collectionAddress: string | null;
-    collectionName: string | null;
-    tokenAddress: string | null;
-    tokenSymbol: string | null;
-    publicSpots: number;
-    status: ListingStatus;
-    startAt: Date;
-    endAt: Date;
-  };
-  raffle: {
-    id: string;
-    slug: string;
-    title: string;
-    type: import("@prisma/client").GiveawayType;
-    status: GiveawayStatus;
-    startAt: Date;
-    endAt: Date;
-    winnersCount: number;
-    fcfsCursor: number;
-    entryCount: number;
-    winnerCount: number;
-  } | null;
-};
-
-/** Listings with a public slice, and the raffle (if opened) for each. */
-export async function getTeamPublicRaffles(teamId: string): Promise<TeamPublicRaffleRow[]> {
-  const rows = await db.whitelistListing.findMany({
-    where: { teamId, status: { not: "CANCELLED" }, OR: [{ publicSpots: { gt: 0 } }, { publicRaffle: { isNot: null } }] },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      slug: true,
-      title: true,
-      assetType: true,
-      chain: true,
-      collectionAddress: true,
-      collectionName: true,
-      tokenAddress: true,
-      tokenSymbol: true,
-      publicSpots: true,
-      status: true,
-      startAt: true,
-      endAt: true,
-      publicRaffle: {
-        select: {
-          id: true,
-          slug: true,
-          title: true,
-          type: true,
-          status: true,
-          startAt: true,
-          endAt: true,
-          winnersCount: true,
-          fcfsCursor: true,
-          _count: { select: { entries: true, winners: true } },
-        },
-      },
-    },
-  });
-  return rows.map(({ publicRaffle, ...listing }) => ({
-    listing,
-    raffle: publicRaffle
-      ? {
-          id: publicRaffle.id,
-          slug: publicRaffle.slug,
-          title: publicRaffle.title,
-          type: publicRaffle.type,
-          status: publicRaffle.status,
-          startAt: publicRaffle.startAt,
-          endAt: publicRaffle.endAt,
-          winnersCount: publicRaffle.winnersCount,
-          fcfsCursor: publicRaffle.fcfsCursor,
-          entryCount: publicRaffle._count.entries,
-          winnerCount: publicRaffle._count.winners,
-        }
-      : null,
-  }));
-}
 
 /** Granted allocations on a team's listings (optionally one listing), newest first. */
 export async function getTeamAllocations(teamId: string, listingId?: string): Promise<AllocationRow[]> {
@@ -645,17 +417,85 @@ export async function getTeamAllocations(teamId: string, listingId?: string): Pr
       request: {
         select: {
           id: true,
-          walletForDelivery: true,
           spotsRequested: true,
           communityName: true,
           contactName: true,
-          contactEmail: true,
-          contactX: true,
-          contactDiscord: true,
-          contactTelegram: true,
+          contactMethod: true,
+          contactHandle: true,
         },
       },
     },
   });
   return rows.map((r) => ({ ...r, wallets: parseWallets(r.wallets) }));
+}
+
+// ---------------------------------------------------------------------------
+// Platform admin: adding a request for a project with no oxbot account
+// ---------------------------------------------------------------------------
+
+export type AdminListingOption = {
+  id: string;
+  slug: string;
+  title: string;
+  spotsPerRequestMin: number;
+  spotsPerRequestMax: number;
+  available: number;
+  team: { name: string; slug: string };
+};
+
+/** Every listing currently open for requests, across all teams. */
+export async function getOpenListingsForAdmin(): Promise<AdminListingOption[]> {
+  const now = new Date();
+  const rows = await db.whitelistListing.findMany({
+    where: { status: "OPEN", startAt: { lte: now }, endAt: { gt: now } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      spotsPerRequestMin: true,
+      spotsPerRequestMax: true,
+      totalSpots: true,
+      reservedSpots: true,
+      allocatedSpots: true,
+      team: { select: { name: true, slug: true } },
+    },
+  });
+  return rows.map((l) => ({
+    id: l.id,
+    slug: l.slug,
+    title: l.title,
+    spotsPerRequestMin: l.spotsPerRequestMin,
+    spotsPerRequestMax: l.spotsPerRequestMax,
+    available: availableSpots(l),
+    team: l.team,
+  }));
+}
+
+/** One listing for the admin add-request form (any status, so a paused/closed one is still viewable). */
+export async function getListingForAdmin(listingId: string): Promise<AdminListingOption | null> {
+  const l = await db.whitelistListing.findUnique({
+    where: { id: listingId },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      spotsPerRequestMin: true,
+      spotsPerRequestMax: true,
+      totalSpots: true,
+      reservedSpots: true,
+      allocatedSpots: true,
+      team: { select: { name: true, slug: true } },
+    },
+  });
+  if (!l) return null;
+  return {
+    id: l.id,
+    slug: l.slug,
+    title: l.title,
+    spotsPerRequestMin: l.spotsPerRequestMin,
+    spotsPerRequestMax: l.spotsPerRequestMax,
+    available: availableSpots(l),
+    team: l.team,
+  };
 }

@@ -16,7 +16,6 @@ import { giveawayPhase, PHASE_META } from "@/lib/format";
 import { GIVEAWAY_TYPE_META, GIVEAWAY_VISIBILITY_META } from "@/lib/constants";
 import { formatNumber } from "@/lib/utils";
 import { integrations } from "@/lib/env";
-import type { Blockchain } from "@prisma/client";
 
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -64,7 +63,6 @@ export async function GiveawayDetailView({
   let twitterConnected = false;
   let discordConnected = false;
   let hasProfileWallet = false;
-  let walletChains: Blockchain[] = [];
   if (viewerId) {
     const [accounts, walletSaved] = await Promise.all([
       getConnectedAccounts(viewerId),
@@ -74,7 +72,6 @@ export async function GiveawayDetailView({
     twitterConnected = Boolean(accounts.twitterUserId);
     discordConnected = Boolean(accounts.discordUserId);
     hasProfileWallet = walletSaved;
-    walletChains = accounts.wallets.map((w) => w.chain);
   }
 
   return (
@@ -243,8 +240,6 @@ export async function GiveawayDetailView({
               viewerEntry={giveaway.viewerEntry}
               xAccount={giveaway.xAccount}
               discordInvite={giveaway.team.discordInvite}
-              walletChains={walletChains}
-              nftLive={integrations.nft.live}
               returnPath={returnPath}
             />
           </aside>

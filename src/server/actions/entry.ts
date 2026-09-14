@@ -105,7 +105,6 @@ export async function submitEntryAction(
       email: formData.get("email") ?? "",
       code: formData.get("code") ?? "",
       walletAddress: formData.get("walletAddress") ?? "",
-      holdingAttestations: formData.getAll("holdAttest").map(String),
     });
     if (!parsed.success) {
       return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
@@ -134,8 +133,7 @@ export async function submitEntryAction(
         readConfig(req),
         submission,
         accounts,
-        giveaway.discordServerId,
-        req.id
+        giveaway.discordServerId
       );
 
       let ok = check.ok;
@@ -289,7 +287,6 @@ export async function submitEntryAction(
     });
 
     revalidatePath(`/giveaways/${slug}`);
-    if (giveaway.listingId) revalidatePath(`/collab/raffles/${slug}`);
     revalidatePath(`/dashboard/${giveaway.team.slug}/giveaways/${giveawayId}`);
 
     return completed

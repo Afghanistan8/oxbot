@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut, LayoutDashboard, User as UserIcon, Trophy } from "lucide-react";
+import { LogOut, LayoutDashboard, User as UserIcon, Trophy, ShieldCheck } from "lucide-react";
 
 import { signOutAction } from "@/server/actions/auth";
 import {
@@ -21,10 +21,13 @@ export function UserMenu({
   name,
   email,
   image,
+  isPlatformAdmin = false,
 }: {
   name: string | null;
   email: string | null;
   image: string | null;
+  /** Shows a "Platform admin" entry to the Collab admin tools. */
+  isPlatformAdmin?: boolean;
 }) {
   const initials = (name ?? email ?? "?")
     .split(/\s+/)
@@ -73,6 +76,14 @@ export function UserMenu({
             My wins
           </Link>
         </DropdownMenuItem>
+        {isPlatformAdmin && (
+          <DropdownMenuItem asChild>
+            <Link href="/admin/collab">
+              <ShieldCheck className="h-4 w-4" />
+              Platform admin
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <form action={signOutAction}>
           <button type="submit" className="w-full">

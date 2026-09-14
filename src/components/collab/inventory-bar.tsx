@@ -3,7 +3,7 @@ import { cn, formatNumber } from "@/lib/utils";
 
 /**
  * InventoryBar — a listing's spots as one stacked bar: confirmed/delivered,
- * reserved, public raffle slice, and what's still available to partners.
+ * reserved, and what's still available to partners.
  */
 export function InventoryBar({
   listing,
@@ -19,7 +19,6 @@ export function InventoryBar({
   const segments = [
     { key: "allocated", label: "Allocated", value: listing.allocatedSpots, className: "bg-gold" },
     { key: "reserved", label: "Reserved", value: listing.reservedSpots, className: "bg-gold/50" },
-    { key: "public", label: "Public raffle", value: listing.publicSpots, className: "bg-scarlet/40" },
   ];
 
   return (

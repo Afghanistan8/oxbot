@@ -6,12 +6,10 @@ import { db } from "@/lib/db";
 import { CHAIN_META } from "@/lib/constants";
 import { joinCollabPath } from "@/lib/collab/host";
 import { getCollabSurface, mainSiteHref } from "@/lib/collab/surface";
-import { isVerifiedTeam } from "@/lib/collab/eligibility";
 import { listPublicListings, type ListingCardData } from "@/server/queries/collab-public";
 import { listPublicGiveaways } from "@/server/queries/giveaways";
 import type { GiveawayCardData } from "@/types/giveaway";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { ChainBadge } from "@/components/giveaway/chain-badge";
 import { GiveawayCard } from "@/components/giveaway/giveaway-card";
 import { LocalTime } from "@/components/local-time";
@@ -38,12 +36,6 @@ async function getPublicProject(slug: string) {
       mintPrice: true,
       mintAt: true,
       mintTba: true,
-      _count: {
-        select: {
-          giveaways: { where: { status: { notIn: ["DRAFT", "CANCELLED"] } } },
-          collabListings: { where: { status: { notIn: ["DRAFT", "CANCELLED"] } } },
-        },
-      },
     },
   });
 }
@@ -67,13 +59,6 @@ export default async function CollabProjectPage({ params }: { params: Promise<{ 
     listPublicGiveaways({ teamId: team.id, sort: "ending", take: 8 }).catch((): GiveawayCardData[] => []),
     mainSiteHref("/"),
   ]);
-  const verified = isVerifiedTeam({
-    logoUrl: team.logoUrl,
-    xHandle: team.xHandle,
-    discordInvite: team.discordInvite,
-    publishedGiveaways: team._count.giveaways,
-    publishedListings: team._count.collabListings,
-  });
 
   return (
     <main className="pb-16">
@@ -97,7 +82,6 @@ export default async function CollabProjectPage({ params }: { params: Promise<{ 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">{team.name}</h1>
-              {verified && <Badge variant="gold">Verified project</Badge>}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {team.primaryChain && <ChainBadge chain={team.primaryChain} />}
@@ -157,7 +141,7 @@ export default async function CollabProjectPage({ params }: { params: Promise<{ 
             </h2>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {giveaways.map((g) => (
-                <GiveawayCard key={g.id} giveaway={g} href={g.listingId ? href(`/raffles/${g.slug}`) : `${oxbotHref.replace(/\/$/, "")}/giveaways/${g.slug}`} />
+                <GiveawayCard key={g.id} giveaway={g} href={`${oxbotHref.replace(/\/$/, "")}/giveaways/${g.slug}`} />
               ))}
             </div>
           </section>

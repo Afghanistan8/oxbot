@@ -1,9 +1,10 @@
+import { Fragment } from "react";
 import { Download, Package } from "lucide-react";
 
 import { resolveTeamPage } from "@/server/queries/require-team-page";
 import { getTeamAllocations } from "@/server/queries/collab";
 import { ALLOCATION_STATUS_META } from "@/lib/collab/constants";
-import { roleAtLeast } from "@/lib/constants";
+import { CHAIN_META, roleAtLeast } from "@/lib/constants";
 import { formatNumber } from "@/lib/utils";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { LocalTime } from "@/components/local-time";
@@ -11,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AllocationRowActions } from "@/components/collab/allocation-row-actions";
+import { AllocationWalletsForm } from "@/components/collab/outgoing-actions";
 import { CollabEmptyState } from "@/components/collab/collab-empty-state";
 
 export const metadata = { title: "Allocations" };
@@ -75,29 +77,49 @@ export default async function AllocationsPage({
               <TableBody>
                 {allocations.map((a) => {
                   const meta = ALLOCATION_STATUS_META[a.status];
+                  // A teamless (admin-added) allocation has no receiving team to log in
+                  // and paste wallets from their own desk — offer that here instead.
+                  const needsWalletsFromUs = !a.team && a.status !== "REVOKED" && a.status !== "DELIVERED";
                   return (
-                    <TableRow key={a.id}>
-                      <TableCell>
-                        <p className="text-sm font-medium text-white">{a.team.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Granted <LocalTime value={a.createdAt} mode="date" />
-                          {a.team.xHandle && <> · @{a.team.xHandle}</>}
-                        </p>
-                      </TableCell>
-                      <TableCell className="hidden max-w-[14rem] truncate text-sm text-foreground/85 md:table-cell">
-                        {a.listing.title}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-white">{formatNumber(a.spots)}</TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
-                        {a.wallets.length}/{a.spots}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={meta.badge}>{meta.label}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <AllocationRowActions allocationId={a.id} status={a.status} canRevoke={canRevoke} />
-                      </TableCell>
-                    </TableRow>
+                    <Fragment key={a.id}>
+                      <TableRow>
+                        <TableCell>
+                          <p className="text-sm font-medium text-white">{a.team?.name ?? a.request?.communityName ?? "—"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Granted <LocalTime value={a.createdAt} mode="date" />
+                            {a.team?.xHandle && <> · @{a.team.xHandle}</>}
+                          </p>
+                        </TableCell>
+                        <TableCell className="hidden max-w-[14rem] truncate text-sm text-foreground/85 md:table-cell">
+                          {a.listing.title}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-white">{formatNumber(a.spots)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                          {a.wallets.length}/{a.spots}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={meta.badge}>{meta.label}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <AllocationRowActions allocationId={a.id} status={a.status} canRevoke={canRevoke} />
+                        </TableCell>
+                      </TableRow>
+                      {needsWalletsFromUs && (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={6} className="bg-ink-black/30">
+                            <p className="mb-2 text-xs text-muted-foreground">
+                              No oxbot account on the receiving end — paste their delivery wallets yourself.
+                            </p>
+                            <AllocationWalletsForm
+                              allocationId={a.id}
+                              spots={a.spots}
+                              existing={a.wallets.map((w) => (w.label ? `${w.address}, ${w.label}` : w.address)).join("\n")}
+                              chainLabel={CHAIN_META[a.listing.chain].label}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
                   );
                 })}
               </TableBody>

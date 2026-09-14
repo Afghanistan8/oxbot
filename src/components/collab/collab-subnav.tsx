@@ -14,9 +14,7 @@ const TABS = [
   { href: "/listings", label: "Listings" },
   { href: "/requests", label: "Incoming" },
   { href: "/outgoing", label: "Outgoing" },
-  { href: "/raffles", label: "Public raffles" },
   { href: "/allocations", label: "Allocations" },
-  { href: "/criteria", label: "Criteria templates" },
 ] as const;
 
 export function CollabSubnav({ counts }: { counts?: { incoming?: number; outgoing?: number } }) {

@@ -17,7 +17,6 @@ export function MockModeBanner() {
   if (!integrations.discord.oauthLive || !integrations.discord.botLive)
     mocked.push("Discord");
   if (!integrations.uploads.live) mocked.push("Uploads");
-  if (!integrations.nft.live) mocked.push("NFT");
 
   return (
     <div className="pointer-events-none fixed bottom-3 left-1/2 z-[60] -translate-x-1/2">

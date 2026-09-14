@@ -26,7 +26,7 @@ enum TeamRole {
   OWNER
   ADMIN
   EDITOR
-  COLLAB_MANAGER // scoped: whitelist raffles + collabs only
+  COLLAB_MANAGER // scoped: the Collab desk only
 }
 
 enum GiveawayType {
@@ -74,8 +74,6 @@ enum RequirementType {
   DISCORD_MEMBER
   DISCORD_ROLE
   WALLET // future-ready; optional in Phase 1
-  NFT_HOLD // hold >= N NFTs from a collection (Collab public WL raffles)
-  TOKEN_BALANCE // hold >= a minimum balance of a fungible token
 }
 
 enum EntryStatus {
@@ -113,11 +111,11 @@ enum ListingStatus {
   CANCELLED
 }
 
-enum DistributionMethod {
-  FCFS // first fully-qualified requests win, race-safe
-  CRITERIA // qualified requests go to a review queue
-  RAFFLE // qualified requester teams are drawn with a seeded CSPRNG at close
-  MANUAL // everything goes to the review queue
+/// How a requester says they can be reached if their request is approved.
+enum ContactMethod {
+  X
+  DISCORD
+  TELEGRAM
 }
 
 enum RequestStatus {
@@ -162,8 +160,9 @@ model User {
   connections SocialConnection[]
   wallets     Wallet[]
 
-  collabRequestsSubmitted CollabRequest[] @relation("CollabRequestSubmitter")
-  collabRequestsReviewed  CollabRequest[] @relation("CollabRequestReviewer")
+  collabRequestsSubmitted  CollabRequest[] @relation("CollabRequestSubmitter")
+  collabRequestsReviewed   CollabRequest[] @relation("CollabRequestReviewer")
+  collabRequestsAdminAdded CollabRequest[] @relation("CollabRequestAdmin")
 }
 
 model Account {
@@ -284,10 +283,9 @@ model Team {
   auditLogs AuditLog[]
 
   // OxFoxes Collab
-  collabListings          WhitelistListing[]
-  collabRequests          CollabRequest[]    @relation("CollabRequesterTeam")
-  collabAllocations       CollabAllocation[] @relation("CollabReceivingTeam")
-  collabCriteriaTemplates ListingCriteria[]  @relation("CollabCriteriaTemplates")
+  collabListings    WhitelistListing[]
+  collabRequests    CollabRequest[]    @relation("CollabRequesterTeam")
+  collabAllocations CollabAllocation[] @relation("CollabReceivingTeam")
 }
 
 model TeamMember {
@@ -356,16 +354,11 @@ model Giveaway {
   // FCFS monotonic counter (next seq to assign). Kept on the row for atomic bump.
   fcfsCursor Int @default(0)
 
-  // OxFoxes Collab: set when this giveaway is the public whitelist raffle for a
-  // listing's `publicSpots`. One raffle per listing.
-  listingId String? @unique
-
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   team         Team                  @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  listing      WhitelistListing?     @relation(fields: [listingId], references: [id], onDelete: SetNull)
   requirements GiveawayRequirement[]
   entries      Entry[]
   codes        EntryCode[]
@@ -385,10 +378,6 @@ model GiveawayRequirement {
   //  TWITTER_LIKE:   { "tweetId": "123" }
   //  DISCORD_ROLE:   { "guildId": "...", "roleIds": ["...","..."] }
   //  CODE:           { "caseSensitive": false }
-  //  NFT_HOLD:       { "chain": "ETHEREUM", "contractAddress": "0x…", "minCount": 1,
-  //                    "tokenIds": ["1","2"], "label": "Lava Foxes" }
-  //  TOKEN_BALANCE:  { "chain": "SOLANA", "contractAddress": "<mint>", "minBalance": "100",
-  //                    "label": "LAVA" }
   config     Json            @default("{}")
   required   Boolean         @default(true)
   order      Int             @default(0)
@@ -524,14 +513,21 @@ model AuditLog {
 // ---------------------------------------------------------------------------
 // OxFoxes Collab — whitelist partnership desk
 //
-// Projects list whitelist inventory (WhitelistListing); other teams request an
-// allocation (CollabRequest); granted spots become CollabAllocation rows. A
-// listing's `publicSpots` slice is distributed through an ordinary Giveaway
-// linked via `Giveaway.listingId`, so the public raffle reuses the existing
-// task engine, FCFS sequencing and seeded draws.
+// Projects list whitelist inventory (WhitelistListing); other projects request
+// an allocation (CollabRequest) by filling a fixed community/contact intake
+// form; approved requests become CollabAllocation rows holding the granted
+// spots until delivery wallets are in. Every decision is a manual call by the
+// listing team — there is no automatic scoring or drawing among requesters.
+//
+// A requester normally files on behalf of one of their own oxbot Teams. The
+// platform admin (env `PLATFORM_ADMIN_EMAILS`) can also file a request
+// directly on behalf of a project that doesn't want to create an oxbot
+// account — `requesterTeamId` is null and `addedByAdminId` records who added
+// it; the listing team (or the admin) reviews and delivers it exactly like
+// any other request.
 //
 // Inventory invariant (enforced transactionally in lib/collab/inventory.ts):
-//   totalSpots >= reservedSpots + allocatedSpots + publicSpots
+//   totalSpots >= reservedSpots + allocatedSpots
 // ---------------------------------------------------------------------------
 
 model WhitelistListing {
@@ -551,112 +547,65 @@ model WhitelistListing {
   totalSpots         Int
   reservedSpots      Int                @default(0) // granted, awaiting partner wallet confirmation
   allocatedSpots     Int                @default(0) // confirmed / delivered partner spots
-  publicSpots        Int                @default(0) // carved out for the public raffle
   spotsPerRequestMin Int                @default(1)
   spotsPerRequestMax Int                @default(50)
-  distributionMethod DistributionMethod @default(CRITERIA)
   status             ListingStatus      @default(DRAFT)
   visibility         GiveawayVisibility @default(PUBLIC)
   startAt            DateTime
   endAt              DateTime
   hideRequestCount   Boolean            @default(false)
   notesPrivate       String?            @db.Text
-  // Partner-raffle auditability (RAFFLE method): the seed the requester-team
-  // draw was run with, so the selection is reproducible.
-  drawSeed           String?
-  drawnAt            DateTime?
   createdById        String?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  team         Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  criteria     ListingCriteria?   @relation("ListingCriteria")
-  requests     CollabRequest[]
-  allocations  CollabAllocation[]
-  publicRaffle Giveaway?
+  team        Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  requests    CollabRequest[]
+  allocations CollabAllocation[]
 
   @@index([teamId])
   @@index([status, visibility])
   @@index([chain])
 }
 
-/// Qualification thresholds. Either attached to one listing (`listingId`) or a
-/// reusable team template (`templateTeamId` + `name`, no listing).
-model ListingCriteria {
-  id                  String       @id @default(cuid())
-  listingId           String?      @unique
-  templateTeamId      String?
-  name                String?
-  minCommunitySize    Int?
-  minHolderCount      Int?
-  minTwitterFollowers Int?
-  minDiscordMembers   Int?
-  minRaffleEntries    Int? // completed entries across the requester team's oxbot giveaways
-  requiredChains      Blockchain[] @default([])
-  requiredAssetType   AssetType?
-  requireVerifiedTeam Boolean      @default(false)
-  // [{ "id": "r1", "label": "Doxxed team" }] — requester attests each rule.
-  customRules         Json?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
-
-  listing      WhitelistListing? @relation("ListingCriteria", fields: [listingId], references: [id], onDelete: Cascade)
-  templateTeam Team?             @relation("CollabCriteriaTemplates", fields: [templateTeamId], references: [id], onDelete: Cascade)
-
-  @@index([templateTeamId])
-}
-
 model CollabRequest {
-  id                    String        @id @default(cuid())
-  listingId             String
-  requesterTeamId       String
-  submittedById         String?
-  status                RequestStatus @default(SUBMITTED)
-  spotsRequested        Int
-  spotsGranted          Int?
-  pitch                 String        @db.Text
-  audienceSummary       String?       @db.Text
-  communitySize         Int?
-  holderCount           Int?
-  twitterFollowers      Int?
-  discordMembers        Int?
-  // Community being pitched (self-reported; links normalized to https URLs).
-  communityName         String?
-  communityX            String?
-  communityDiscord      String?
-  communityTelegram     String?
-  communityTiktok       String?
-  communityInstagram    String?
-  // Raffle entries the requester reports running (oxbot-verified entries are
-  // computed separately for eligibility).
-  reportedRaffleEntries Int?
-  // How to reach the requester — PRIVATE to the listing team.
-  contactName           String?
-  contactEmail          String?
-  contactX              String?
-  contactDiscord        String?
-  contactTelegram       String?
-  requesterChains       Blockchain[]  @default([])
-  requesterAssetType    AssetType?
-  // { "links": ["https://dune…"], "attestations": { "r1": true } }
-  evidence              Json?
-  walletForDelivery     String?
-  deliveryChain         Blockchain?
-  // Eligibility snapshot computed server-side at submission.
-  eligible              Boolean       @default(false)
-  eligibilityScore      Int           @default(0)
-  eligibility           Json?
-  requesterReply        String?       @db.Text // answer to a NEEDS_INFO review
-  reviewerNote          String?       @db.Text
-  reviewedById          String?
-  reviewedAt            DateTime?
-  expiresAt             DateTime?
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  listingId       String
+  // Null when the platform admin added this request on behalf of a project
+  // that has no oxbot Team (see `addedByAdminId`).
+  requesterTeamId String?
+  submittedById   String? // the signed-in requester, when they filed it themselves
+  addedByAdminId  String? // the platform admin, when they filed it on the requester's behalf
+  status          RequestStatus @default(SUBMITTED)
+  spotsRequested  Int
+  spotsGranted    Int?
+
+  // The community being pitched — a fixed intake form, not configurable per listing.
+  communityName       String
+  communitySize       Int
+  communityX          String // required — normalized to an https://x.com/... URL
+  communityDiscord    String? // optional — normalized invite URL
+  communityTelegram   String? // optional — normalized https://t.me/... URL
+  // Screenshot of a raffle this community has run elsewhere (never oxbot's own
+  // entrant list) — optional evidence of a track record, uploaded like a banner.
+  raffleProofImageUrl String?
+
+  // How to reach them if chosen — PRIVATE to the listing team (and the admin).
+  contactName   String
+  contactMethod ContactMethod
+  contactHandle String // handle/username on contactMethod, no leading @
+
+  requesterReply String?   @db.Text // answer to a NEEDS_INFO review
+  reviewerNote   String?   @db.Text
+  reviewedById   String?
+  reviewedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   listing       WhitelistListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  requesterTeam Team              @relation("CollabRequesterTeam", fields: [requesterTeamId], references: [id], onDelete: Cascade)
+  requesterTeam Team?             @relation("CollabRequesterTeam", fields: [requesterTeamId], references: [id], onDelete: Cascade)
   submittedBy   User?             @relation("CollabRequestSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  addedByAdmin  User?             @relation("CollabRequestAdmin", fields: [addedByAdminId], references: [id], onDelete: SetNull)
   reviewedBy    User?             @relation("CollabRequestReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   allocation    CollabAllocation?
 
@@ -669,7 +618,7 @@ model CollabAllocation {
   id          String           @id @default(cuid())
   listingId   String
   requestId   String?          @unique
-  teamId      String // receiving team
+  teamId      String? // receiving team — null for an admin-added, teamless request
   spots       Int
   status      AllocationStatus @default(RESERVED)
   // [{ "address": "0x…", "chain": "ETHEREUM", "label": "treasury" }]
@@ -683,7 +632,7 @@ model CollabAllocation {
 
   listing WhitelistListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
   request CollabRequest?   @relation(fields: [requestId], references: [id], onDelete: SetNull)
-  team    Team             @relation("CollabReceivingTeam", fields: [teamId], references: [id], onDelete: Cascade)
+  team    Team?            @relation("CollabReceivingTeam", fields: [teamId], references: [id], onDelete: Cascade)
 
   @@index([listingId, status])
   @@index([teamId])
