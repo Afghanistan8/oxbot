@@ -9,6 +9,7 @@ import { brand } from "@/lib/brand";
 import { SiteHeader } from "@/components/brand/site-header";
 import { SiteFooter } from "@/components/brand/site-footer";
 import { GiveawayDetailView } from "@/components/giveaway/giveaway-detail-view";
+import { ProfileCompletionNotice } from "@/components/profile/profile-completion-notice";
 
 // Viewer-specific (entry progress, connected accounts) — always render live.
 export const dynamic = "force-dynamic";
@@ -72,6 +73,12 @@ export default async function PublicGiveawayPage({
   return (
     <>
       <SiteHeader />
+      {viewerId && (
+        <div className="container">
+          {/* Renders only while the profile is incomplete; otherwise nothing. */}
+          <ProfileCompletionNotice userId={viewerId} className="mt-6" />
+        </div>
+      )}
       <GiveawayDetailView giveaway={giveaway} viewerId={viewerId} returnPath={`/giveaways/${slug}`} />
       <SiteFooter />
     </>

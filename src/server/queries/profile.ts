@@ -18,6 +18,38 @@ export async function userHasProfileWallet(userId: string): Promise<boolean> {
   return wallet !== null;
 }
 
+/** The parts of an entrant's profile we ask them to complete. */
+export type ProfileField = "email" | "wallet" | "x" | "discord";
+
+export type ProfileCompletion = {
+  complete: boolean;
+  /** Fields still missing, in the order we present them. */
+  missing: ProfileField[];
+};
+
+/**
+ * How much of the entrant profile is filled in. "Complete" means everything a
+ * project needs to reach a winner and hand over a prize: an email on file, at
+ * least one wallet, and both social accounts connected. Drives the "finish your
+ * profile" notice — which disappears on its own once all four are done.
+ */
+export async function getProfileCompletion(userId: string): Promise<ProfileCompletion> {
+  const [user, wallet, connections] = await Promise.all([
+    db.user.findUnique({ where: { id: userId }, select: { email: true } }),
+    db.wallet.findFirst({ where: { userId, address: { not: "" } }, select: { id: true } }),
+    db.socialConnection.findMany({ where: { userId }, select: { provider: true } }),
+  ]);
+  const providers = new Set(connections.map((c) => c.provider));
+
+  const missing: ProfileField[] = [];
+  if (!user?.email) missing.push("email");
+  if (!wallet) missing.push("wallet");
+  if (!providers.has("twitter")) missing.push("x");
+  if (!providers.has("discord")) missing.push("discord");
+
+  return { complete: missing.length === 0, missing };
+}
+
 export async function getUserWallets(userId: string): Promise<WalletAddresses> {
   const rows = await db.wallet.findMany({
     where: { userId, chain: { in: [...PROFILE_WALLET_CHAINS] } },

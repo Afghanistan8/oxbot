@@ -21,6 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { GiveawayCard } from "@/components/giveaway/giveaway-card";
 import { GiveawayFilters } from "@/components/giveaway/giveaway-filters";
 import { HowItWorks } from "@/components/marketing/how-it-works";
+import { ProfileCompletionNotice } from "@/components/profile/profile-completion-notice";
 
 // Always render at request time — reads live giveaway data + URL filters.
 export const dynamic = "force-dynamic";
@@ -80,6 +81,9 @@ export default async function LandingPage({
 
         {/* Explore / public grid */}
         <section id="explore" className="container scroll-mt-20 py-16">
+          {/* Renders only while the signed-in viewer's profile is incomplete. */}
+          {userId && <ProfileCompletionNotice userId={userId} className="mb-8" />}
+
           <div className="mb-8 flex flex-col gap-2">
             <div className="flex items-end justify-between gap-4">
               <div>
