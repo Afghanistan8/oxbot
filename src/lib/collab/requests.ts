@@ -32,6 +32,12 @@ export type FileRequestInput = {
   submittedById: string | null;
   /** The platform admin, when they filed it on the requester's behalf. */
   addedByAdminId: string | null;
+  /**
+   * Public self-filed requests must land on an OPEN listing only (matching the
+   * desk UI). A platform admin may add a request to a paused/allocated listing,
+   * so admin-add leaves this false.
+   */
+  requireOpenListing?: boolean;
   spotsRequested: number;
   communityName: string;
   communitySize: number;
@@ -68,6 +74,16 @@ export async function fileRequest(
       const t = now.getTime();
       if (listing.status === "DRAFT" || listing.status === "CANCELLED" || listing.status === "CLOSED") {
         throw new RequestRuleError("This listing isn't accepting requests.");
+      }
+      // Public requests are only allowed on an OPEN listing — a PAUSED listing
+      // has stopped taking them and an ALLOCATED one is full. (Admin-add may
+      // still place a request on those; it leaves requireOpenListing false.)
+      if (input.requireOpenListing && listing.status !== "OPEN") {
+        throw new RequestRuleError(
+          listing.status === "PAUSED"
+            ? "This listing has paused new requests."
+            : "Every partner spot on this listing is taken."
+        );
       }
       if (t < listing.startAt.getTime()) {
         throw new RequestRuleError("This listing isn't open for requests yet.");

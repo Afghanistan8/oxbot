@@ -345,6 +345,7 @@ export async function submitRequestAction(
         requesterTeamId: data.requesterTeamId,
         submittedById: userId,
         addedByAdminId: null,
+        requireOpenListing: true,
         spotsRequested: data.spotsRequested,
         communityName: data.communityName,
         communitySize: data.communitySize,
