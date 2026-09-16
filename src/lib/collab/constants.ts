@@ -40,9 +40,9 @@ export const REQUEST_STATUS_META: Record<RequestStatus, { label: string; badge: 
 };
 
 export const ALLOCATION_STATUS_META: Record<AllocationStatus, { label: string; badge: BadgeVariant; blurb: string }> = {
-  RESERVED: { label: "Reserved", badge: "warn", blurb: "Granted — waiting on delivery wallets." },
-  CONFIRMED: { label: "Confirmed", badge: "default", blurb: "Wallets confirmed — ready to add to the whitelist." },
-  DELIVERED: { label: "Delivered", badge: "success", blurb: "Added to the whitelist." },
+  RESERVED: { label: "Reserved", badge: "warn", blurb: "Granted — waiting on the partner's winners + proof." },
+  CONFIRMED: { label: "Pending review", badge: "default", blurb: "Winners submitted — waiting on the listing team to review." },
+  DELIVERED: { label: "Accepted", badge: "success", blurb: "Accepted — added to the whitelist." },
   REVOKED: { label: "Revoked", badge: "danger", blurb: "Spots returned to inventory." },
 };
 

@@ -23,9 +23,11 @@ import { RequestRuleError, approveRequest, fileRequest } from "@/lib/collab/requ
 import { notifyRequestDecision } from "@/lib/collab/notify";
 import {
   adminRequestFormSchema,
+  allocationReviewSchema,
   allocationWalletsSchema,
   listingFormSchema,
   parseWalletLines,
+  raffleUrlSchema,
   requestFormSchema,
   requesterReplySchema,
   reviewDecisionSchema,
@@ -708,15 +710,44 @@ export async function submitAllocationWalletsAction(
       });
     }
 
+    // A partner (receiving team) must attach proof they ran their giveaway — the
+    // raffle link is required, an image is optional. When the listing team is
+    // pasting wallets for a teamless partner, no raffle link is required.
+    const isPartnerSubmit = allocation.teamId != null;
+    const rawRaffle = String(formData.get("raffleUrl") ?? "").trim();
+    const rawProof = String(formData.get("proofImageUrl") ?? "").trim();
+    let raffleUrl: string | null = null;
+    if (isPartnerSubmit || rawRaffle) {
+      const rp = raffleUrlSchema.safeParse(rawRaffle);
+      if (!rp.success) return fail("Please fix the errors below.", { raffleUrl: rp.error.issues.map((i) => i.message) });
+      raffleUrl = rp.data;
+    }
+    let proofImageUrl: string | null = null;
+    if (rawProof) {
+      const pp = z.string().url().max(500).safeParse(rawProof);
+      if (!pp.success) return fail("Please fix the errors below.", { proofImageUrl: ["Enter a valid image link."] });
+      proofImageUrl = pp.data;
+    }
+
     try {
       await db.$transaction(async (tx) => {
         const listing = await lockListing(tx, allocation.listingId);
         const fresh = await tx.collabAllocation.findUniqueOrThrow({ where: { id: allocationId } });
         const walletJson = parsed.data.wallets as unknown as Prisma.InputJsonValue;
+        // A fresh submit clears any prior review so it reads as pending again.
+        const submission = {
+          wallets: walletJson,
+          raffleUrl,
+          proofImageUrl,
+          submittedAt: new Date(),
+          reviewNote: null,
+          reviewedById: null,
+          reviewedAt: null,
+        };
         if (fresh.status === "RESERVED") {
-          await transitionAllocation(tx, listing, fresh, "CONFIRMED", { wallets: walletJson });
+          await transitionAllocation(tx, listing, fresh, "CONFIRMED", submission);
         } else if (fresh.status === "CONFIRMED") {
-          await tx.collabAllocation.update({ where: { id: allocationId }, data: { wallets: walletJson } });
+          await tx.collabAllocation.update({ where: { id: allocationId }, data: submission });
         } else {
           throw new InventoryError(`This allocation is already ${fresh.status.toLowerCase()}.`);
         }
@@ -731,14 +762,100 @@ export async function submitAllocationWalletsAction(
       actorId: userId,
       action: "allocation.wallets",
       target: allocationId,
-      meta: { partner: allocation.team?.name ?? null, wallets: wallets.length },
+      meta: { partner: allocation.team?.name ?? null, wallets: wallets.length, raffleUrl },
     });
     if (allocation.teamId) {
       await recordAudit({ teamId: allocation.teamId, actorId: userId, action: "allocation.wallets", target: allocationId, meta: { wallets: wallets.length } });
       revalidatePath(`/dashboard/${allocation.team?.slug}/collab`, "layout");
     }
     revalidatePath(`/dashboard/${allocation.listing.team.slug}/collab`, "layout");
-    return ok(undefined, `${wallets.length} wallet${wallets.length === 1 ? "" : "s"} submitted — spots confirmed.`);
+    return ok(
+      undefined,
+      isPartnerSubmit
+        ? `${wallets.length} winner${wallets.length === 1 ? "" : "s"} submitted — sent to the project for review.`
+        : `${wallets.length} wallet${wallets.length === 1 ? "" : "s"} submitted.`
+    );
+  });
+}
+
+/**
+ * Listing team accepts or rejects a partner's submitted winners + proof.
+ * Accept → DELIVERED (added to the whitelist). Reject → back to RESERVED with a
+ * reason so the partner can fix their submission and send it again. Spots stay
+ * held for the partner either way. Runs inside the listing lock.
+ */
+export async function reviewAllocationAction(
+  allocationId: string,
+  _prev: unknown,
+  formData: FormData
+): Promise<ActionState> {
+  const userId = await requireUserId();
+  return runAction(async () => {
+    checkMutateLimit(userId);
+    const allocation = await db.collabAllocation.findUnique({
+      where: { id: allocationId },
+      include: {
+        listing: { include: { team: { select: { slug: true } } } },
+        team: { select: { slug: true, name: true } },
+      },
+    });
+    if (!allocation) return fail("Allocation not found.");
+    await requireTeamRole(userId, allocation.listing.teamId, "COLLAB_MANAGER");
+
+    const parsed = allocationReviewSchema.safeParse({
+      outcome: formData.get("outcome"),
+      note: formData.get("note") || "",
+    });
+    if (!parsed.success) return fail("Please fix the errors below.", zodFieldErrors(parsed.error));
+    const { outcome, note } = parsed.data;
+
+    if (allocation.status !== "CONFIRMED") {
+      return fail("There's no pending submission to review here.");
+    }
+
+    const to = outcome === "accept" ? "DELIVERED" : "RESERVED";
+    try {
+      await db.$transaction(async (tx) => {
+        const listing = await lockListing(tx, allocation.listingId);
+        const fresh = await tx.collabAllocation.findUniqueOrThrow({ where: { id: allocationId } });
+        if (fresh.status !== "CONFIRMED") {
+          throw new InventoryError("This submission just changed — refresh and try again.");
+        }
+        await transitionAllocation(tx, listing, fresh, to, {
+          reviewNote: note || null,
+          reviewedById: userId,
+          reviewedAt: new Date(),
+        });
+      });
+    } catch (err) {
+      if (err instanceof InventoryError) return fail(err.message);
+      throw err;
+    }
+
+    await recordAudit({
+      teamId: allocation.listing.teamId,
+      actorId: userId,
+      action: outcome === "accept" ? "allocation.accept" : "allocation.reject",
+      target: allocationId,
+      meta: { partner: allocation.team?.name ?? null, spots: allocation.spots, note: note || null },
+    });
+    if (allocation.teamId) {
+      await recordAudit({
+        teamId: allocation.teamId,
+        actorId: userId,
+        action: outcome === "accept" ? "allocation.accept" : "allocation.reject",
+        target: allocationId,
+        meta: { spots: allocation.spots, note: note || null },
+      });
+      revalidatePath(`/dashboard/${allocation.team?.slug}/collab`, "layout");
+    }
+    revalidatePath(`/dashboard/${allocation.listing.team.slug}/collab`, "layout");
+    return ok(
+      undefined,
+      outcome === "accept"
+        ? "Accepted — the winners are marked delivered."
+        : "Sent back to the partner with your note."
+    );
   });
 }
 

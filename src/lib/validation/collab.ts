@@ -193,6 +193,25 @@ export const allocationWalletsSchema = z.object({
   wallets: z.array(allocationWalletSchema).min(1, "Add at least one wallet.").max(10_000),
 });
 
+/** A required proof link (the partner's raffle) — used when a partner submits. */
+export const raffleUrlSchema = z
+  .string()
+  .trim()
+  .min(1, "Add the link to your raffle.")
+  .max(500)
+  .url("Enter a valid link (https://…).");
+
+/** Listing team's decision on a submitted winners list + proof. */
+export const allocationReviewSchema = z.discriminatedUnion("outcome", [
+  z.object({ outcome: z.literal("accept"), note: optionalText(1000) }),
+  z.object({
+    outcome: z.literal("reject"),
+    note: z.string().trim().min(5, "Tell them why so they can fix it.").max(1000),
+  }),
+]);
+
+export type AllocationReviewInput = z.infer<typeof allocationReviewSchema>;
+
 /**
  * Parse a pasted wallet list — one per line, optional "address, label".
  * Duplicates (case-insensitive) collapse to one.

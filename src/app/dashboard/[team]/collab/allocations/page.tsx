@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { Download, Package } from "lucide-react";
+import { Download, ExternalLink, ImageIcon, Package } from "lucide-react";
 
 import { resolveTeamPage } from "@/server/queries/require-team-page";
 import { getTeamAllocations } from "@/server/queries/collab";
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AllocationRowActions } from "@/components/collab/allocation-row-actions";
+import { AllocationReviewForm } from "@/components/collab/allocation-review-actions";
 import { AllocationWalletsForm } from "@/components/collab/outgoing-actions";
 import { CollabEmptyState } from "@/components/collab/collab-empty-state";
 
@@ -59,8 +60,8 @@ export default async function AllocationsPage({
         <>
           <div className="mb-6 grid grid-cols-3 gap-3">
             <Mini label="Spots granted" value={formatNumber(totals.spots)} />
-            <Mini label="Wallets received" value={formatNumber(totals.wallets)} />
-            <Mini label="Delivered" value={formatNumber(totals.delivered)} />
+            <Mini label="Winners received" value={formatNumber(totals.wallets)} />
+            <Mini label="Accepted" value={formatNumber(totals.delivered)} />
           </div>
           <div className="overflow-hidden rounded-2xl border border-border bg-card">
             <Table>
@@ -77,9 +78,11 @@ export default async function AllocationsPage({
               <TableBody>
                 {allocations.map((a) => {
                   const meta = ALLOCATION_STATUS_META[a.status];
-                  // A teamless (admin-added) allocation has no receiving team to log in
-                  // and paste wallets from their own desk — offer that here instead.
-                  const needsWalletsFromUs = !a.team && a.status !== "REVOKED" && a.status !== "DELIVERED";
+                  // Teamless (admin-added) RESERVED allocation: the receiving side has
+                  // no oxbot account to submit from, so the listing team pastes wallets.
+                  const pasteForUs = !a.team && a.status === "RESERVED";
+                  // A partner has submitted winners + proof and it's awaiting review.
+                  const pendingReview = a.status === "CONFIRMED";
                   return (
                     <Fragment key={a.id}>
                       <TableRow>
@@ -104,17 +107,69 @@ export default async function AllocationsPage({
                           <AllocationRowActions allocationId={a.id} status={a.status} canRevoke={canRevoke} />
                         </TableCell>
                       </TableRow>
-                      {needsWalletsFromUs && (
+
+                      {pendingReview && (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={6} className="bg-ink-black/30">
+                            <div className="grid gap-4 lg:grid-cols-[1fr_1.1fr]">
+                              {/* Submitted proof */}
+                              <div className="space-y-2">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                  Submitted {a.submittedAt && <LocalTime value={a.submittedAt} mode="date" />}
+                                </p>
+                                <p className="text-sm text-white">{a.wallets.length} winner wallet{a.wallets.length === 1 ? "" : "s"}</p>
+                                {a.raffleUrl ? (
+                                  <a
+                                    href={a.raffleUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-sm font-medium text-scarlet-soft hover:text-white"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" /> View their raffle
+                                  </a>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">No raffle link (pasted on their behalf).</p>
+                                )}
+                                {a.proofImageUrl && (
+                                  <a
+                                    href={a.proofImageUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="group block w-fit"
+                                  >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={a.proofImageUrl}
+                                      alt="Raffle proof"
+                                      className="h-24 rounded-lg border border-border object-cover transition-opacity group-hover:opacity-80"
+                                    />
+                                    <span className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                      <ImageIcon className="h-3 w-3" /> Open screenshot
+                                    </span>
+                                  </a>
+                                )}
+                              </div>
+                              {/* Accept / reject */}
+                              <div className="rounded-xl border border-border bg-card/40 p-3">
+                                <AllocationReviewForm allocationId={a.id} />
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+
+                      {pasteForUs && (
                         <TableRow className="hover:bg-transparent">
                           <TableCell colSpan={6} className="bg-ink-black/30">
                             <p className="mb-2 text-xs text-muted-foreground">
-                              No oxbot account on the receiving end — paste their delivery wallets yourself.
+                              No oxbot account on the receiving end — paste their winner wallets yourself.
                             </p>
                             <AllocationWalletsForm
                               allocationId={a.id}
                               spots={a.spots}
                               existing={a.wallets.map((w) => (w.label ? `${w.address}, ${w.label}` : w.address)).join("\n")}
                               chainLabel={CHAIN_META[a.listing.chain].label}
+                              requireRaffle={false}
                             />
                           </TableCell>
                         </TableRow>

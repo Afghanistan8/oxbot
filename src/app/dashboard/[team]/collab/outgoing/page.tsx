@@ -78,6 +78,9 @@ function OutgoingCard({ request: r }: { request: OutgoingRequestRow }) {
   const isOpen = OPEN_REQUEST_STATUSES.includes(r.status);
   const declinable = (r.status === "APPROVED" || r.status === "PARTIALLY_APPROVED") && alloc?.status === "RESERVED";
   const walletsText = alloc?.wallets.map((w) => (w.label ? `${w.address}, ${w.label}` : w.address)).join("\n") ?? "";
+  // A submission the listing team sent back: spots still RESERVED, but a review
+  // note and a prior submission (raffle link) are present.
+  const rejected = Boolean(alloc && alloc.status === "RESERVED" && alloc.reviewNote && alloc.raffleUrl);
 
   return (
     <div className="rounded-2xl border border-border bg-card/60 p-5">
@@ -149,13 +152,34 @@ function OutgoingCard({ request: r }: { request: OutgoingRequestRow }) {
           </div>
           <ol className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
             <Step done label="Granted" />
-            <Step done={alloc.status === "CONFIRMED" || alloc.status === "DELIVERED"} label={`Wallets submitted (${alloc.wallets.length}/${alloc.spots})`} />
-            <Step done={alloc.status === "DELIVERED"} label="Added to whitelist" />
+            <Step done={alloc.status === "CONFIRMED" || alloc.status === "DELIVERED"} label={`Winners submitted (${alloc.wallets.length}/${alloc.spots})`} />
+            <Step done={alloc.status === "DELIVERED"} label="Accepted & whitelisted" />
           </ol>
+
+          {/* The listing team's decision, when there is one. */}
+          {rejected && (
+            <div className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm">
+              <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <div>
+                <p className="text-xs font-semibold text-destructive">Changes requested by {r.listing.team.name}</p>
+                <p className="whitespace-pre-wrap text-foreground/90">{alloc.reviewNote}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Update your winners or proof below and resubmit.</p>
+              </div>
+            </div>
+          )}
+          {alloc.status === "DELIVERED" && alloc.reviewNote && (
+            <div className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm">
+              <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+              <p className="whitespace-pre-wrap text-foreground/90">{alloc.reviewNote}</p>
+            </div>
+          )}
+
           <p className="text-xs text-muted-foreground">
             {alloc.status === "DELIVERED"
-              ? `${r.listing.team.name} has added your wallets.`
-              : `Paste up to ${alloc.spots} ${CHAIN_META[r.listing.chain].label} wallets. ${r.listing.team.name} exports them straight into their whitelist.`}
+              ? `${r.listing.team.name} accepted your winners and added them.`
+              : alloc.status === "CONFIRMED"
+                ? `Submitted — waiting on ${r.listing.team.name} to review your winners and proof.`
+                : `Run your giveaway, then submit up to ${alloc.spots} ${CHAIN_META[r.listing.chain].label} winner wallets plus the raffle link as proof.`}
             {r.listing.mintOrTgeAt && (
               <span className="ml-1 inline-flex items-center gap-1">
                 <CalendarClock className="h-3 w-3" />
@@ -163,12 +187,15 @@ function OutgoingCard({ request: r }: { request: OutgoingRequestRow }) {
               </span>
             )}
           </p>
+
           {alloc.status !== "DELIVERED" && (
             <AllocationWalletsForm
               allocationId={alloc.id}
               spots={alloc.spots}
               existing={walletsText}
               chainLabel={CHAIN_META[r.listing.chain].label}
+              existingRaffleUrl={alloc.raffleUrl ?? ""}
+              existingProofUrl={alloc.proofImageUrl}
             />
           )}
         </div>

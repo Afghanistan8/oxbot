@@ -624,6 +624,14 @@ model CollabAllocation {
   // [{ "address": "0x…", "chain": "ETHEREUM", "label": "treasury" }]
   wallets     Json?
   note        String?          @db.Text
+  // Proof the partner actually ran their giveaway, submitted with the winners.
+  raffleUrl      String? // link to the partner's raffle/giveaway — required on a partner submission
+  proofImageUrl  String? // optional screenshot of the raffle
+  // Listing team's accept/reject decision on the submitted winners + proof.
+  reviewNote     String?   @db.Text
+  reviewedById   String?
+  reviewedAt     DateTime?
+  submittedAt    DateTime? // when the partner last submitted winners + proof
   confirmedAt DateTime?
   deliveredAt DateTime?
   revokedAt   DateTime?

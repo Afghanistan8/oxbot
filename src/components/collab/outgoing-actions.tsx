@@ -12,9 +12,11 @@ import {
 } from "@/server/actions/collab";
 import type { ActionState } from "@/server/actions/_result";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldError, FormMessage } from "@/components/dashboard/form-message";
+import { ImageUploadField } from "@/components/dashboard/image-upload-field";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 
 /** Requester-side controls on the outgoing desk: reply, withdraw, submit wallets. */
@@ -88,11 +90,19 @@ export function AllocationWalletsForm({
   spots,
   existing,
   chainLabel,
+  requireRaffle = true,
+  existingRaffleUrl = "",
+  existingProofUrl = null,
 }: {
   allocationId: string;
   spots: number;
   existing: string;
   chainLabel: string;
+  /** Partner submissions must attach a raffle link + optional image; a listing
+   *  team pasting wallets for a teamless partner does not. */
+  requireRaffle?: boolean;
+  existingRaffleUrl?: string;
+  existingProofUrl?: string | null;
 }) {
   const [open, setOpen] = useState(!existing);
   const [value, setValue] = useState(existing);
@@ -105,37 +115,72 @@ export function AllocationWalletsForm({
     return (
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
         <Wallet className="h-3.5 w-3.5" />
-        Edit wallets
+        {requireRaffle ? "Edit submission" : "Edit wallets"}
       </Button>
     );
   }
 
   return (
-    <form action={formAction} className="space-y-2">
+    <form action={formAction} className="space-y-3">
       <FormMessage state={state.ok ? undefined : state} />
-      <Label htmlFor={`wallets-${allocationId}`}>
-        Delivery wallets <span className="font-normal text-muted-foreground">({chainLabel} · one per line · optional “, label”)</span>
-      </Label>
-      <Textarea
-        id={`wallets-${allocationId}`}
-        name="wallets"
-        rows={6}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        className="font-mono text-xs"
-        placeholder={"0xabc…123, treasury\n0xdef…456"}
-        required
-      />
-      <div className="flex items-center justify-between gap-3">
-        <p className={count > spots ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
-          {count} / {spots} wallets
-        </p>
+      <div>
+        <Label htmlFor={`wallets-${allocationId}`}>
+          Winner wallets <span className="font-normal text-muted-foreground">({chainLabel} · one per line · optional “, label”)</span>
+        </Label>
+        <Textarea
+          id={`wallets-${allocationId}`}
+          name="wallets"
+          rows={6}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="mt-1.5 font-mono text-xs"
+          placeholder={"0xabc…123, winner1\n0xdef…456"}
+          required
+        />
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <p className={count > spots ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+            {count} / {spots} winners
+          </p>
+        </div>
+        <FieldError errors={Object.entries(state.fieldErrors ?? {}).find(([k]) => k.startsWith("wallets"))?.[1]} />
+      </div>
+
+      {requireRaffle && (
+        <>
+          <div>
+            <Label htmlFor={`raffle-${allocationId}`}>
+              Raffle link <span className="text-primary">*</span>{" "}
+              <span className="font-normal text-muted-foreground">— proof you ran the giveaway</span>
+            </Label>
+            <Input
+              id={`raffle-${allocationId}`}
+              name="raffleUrl"
+              type="url"
+              inputMode="url"
+              defaultValue={existingRaffleUrl}
+              placeholder="https://x.com/…  or  your raffle link"
+              className="mt-1.5"
+              required
+            />
+            <FieldError errors={state.fieldErrors?.raffleUrl} />
+          </div>
+          <ImageUploadField
+            name="proofImageUrl"
+            label="Screenshot (optional)"
+            folder="collab-proof"
+            defaultValue={existingProofUrl}
+            aspect="wide"
+          />
+          <FieldError errors={state.fieldErrors?.proofImageUrl} />
+        </>
+      )}
+
+      <div className="flex justify-end">
         <Button type="submit" size="sm" disabled={pending || count === 0 || count > spots}>
           {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wallet className="h-3.5 w-3.5" />}
-          Submit wallets
+          {requireRaffle ? "Submit winners" : "Submit wallets"}
         </Button>
       </div>
-      <FieldError errors={Object.entries(state.fieldErrors ?? {}).find(([k]) => k.startsWith("wallets"))?.[1]} />
     </form>
   );
 }

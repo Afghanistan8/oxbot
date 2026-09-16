@@ -54,6 +54,8 @@ export type AuditAction =
   | "allocation.confirm"
   | "allocation.deliver"
   | "allocation.revoke"
+  | "allocation.accept"
+  | "allocation.reject"
   | "allocation.export";
 
 export type AuditInput = {

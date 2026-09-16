@@ -330,6 +330,11 @@ export type OutgoingRequestRow = {
     status: AllocationStatus;
     spots: number;
     wallets: AllocationWallet[];
+    raffleUrl: string | null;
+    proofImageUrl: string | null;
+    reviewNote: string | null;
+    reviewedAt: Date | null;
+    submittedAt: Date | null;
     confirmedAt: Date | null;
     deliveredAt: Date | null;
   } | null;
@@ -363,7 +368,19 @@ export async function getOutgoingRequests(teamId: string): Promise<OutgoingReque
         },
       },
       allocation: {
-        select: { id: true, status: true, spots: true, wallets: true, confirmedAt: true, deliveredAt: true },
+        select: {
+          id: true,
+          status: true,
+          spots: true,
+          wallets: true,
+          raffleUrl: true,
+          proofImageUrl: true,
+          reviewNote: true,
+          reviewedAt: true,
+          submittedAt: true,
+          confirmedAt: true,
+          deliveredAt: true,
+        },
       },
     },
   });
@@ -383,6 +400,11 @@ export type AllocationRow = {
   spots: number;
   wallets: AllocationWallet[];
   note: string | null;
+  raffleUrl: string | null;
+  proofImageUrl: string | null;
+  reviewNote: string | null;
+  reviewedAt: Date | null;
+  submittedAt: Date | null;
   createdAt: Date;
   confirmedAt: Date | null;
   deliveredAt: Date | null;
@@ -409,6 +431,11 @@ export async function getTeamAllocations(teamId: string, listingId?: string): Pr
       spots: true,
       wallets: true,
       note: true,
+      raffleUrl: true,
+      proofImageUrl: true,
+      reviewNote: true,
+      reviewedAt: true,
+      submittedAt: true,
       createdAt: true,
       confirmedAt: true,
       deliveredAt: true,
