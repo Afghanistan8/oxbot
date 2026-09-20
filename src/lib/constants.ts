@@ -44,6 +44,7 @@ export const ALL_CHAINS: Blockchain[] = [
   "POLYGON",
   "HYPERLIQUID",
   "ARCH",
+  "ZEC",
   "OTHER",
 ];
 
