@@ -61,6 +61,7 @@ enum Blockchain {
   POLYGON
   HYPERLIQUID
   ARCH
+  ZEC
   OTHER
 }
 

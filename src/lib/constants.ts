@@ -29,6 +29,7 @@ export const CHAIN_META: Record<
   POLYGON: { label: "Polygon", short: "POLY", color: "#8247E5", tokenSymbol: "MATIC" },
   HYPERLIQUID: { label: "Hyperliquid", short: "HYPE", color: "#50D2C1", tokenSymbol: "HYPE" },
   ARCH: { label: "Arch", short: "ARCH", color: "#E8623A", tokenSymbol: "ARCH" },
+  ZEC: { label: "Zcash", short: "ZEC", color: "#F4B728", tokenSymbol: "ZEC" },
   OTHER: { label: "Other", short: "—", color: "#9CA3AF", tokenSymbol: "" },
 };
 
@@ -201,6 +202,7 @@ export const PROFILE_WALLET_CHAINS = [
   "ARBITRUM",
   "HYPERLIQUID",
   "ARCH",
+  "ZEC",
 ] as const satisfies readonly Blockchain[];
 
 /** One address per chain, keyed by chain — empty string when none is set. */
